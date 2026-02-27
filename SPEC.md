@@ -872,7 +872,7 @@ Agents are registered in the internal registry on start. Supervised with restart
 | 4     | Done    | JSON-RPC layer — request/response parsing, method dispatch, error types |
 | 5     | Done    | HTTP server (`A2A.Plug`) — agent card endpoint, JSON-RPC POST, SSE |
 | 6     | Done    | HTTP client (`A2A.Client`) — discover, send_message, stream via Req; `A2A.AgentCard` struct |
-| 7     | —       | Registry + Supervisor — agent discovery, supervised startup        |
+| 7     | Done    | Registry + Supervisor — agent discovery, supervised startup        |
 | 8     | —       | `{:delegate, agent, msg}` — agent-to-agent forwarding             |
 
 ### Out of Scope (Initial Release)
