@@ -887,6 +887,169 @@ Agents are registered in the internal registry on start. Supervised with restart
 
 ---
 
+## Future Work: Agent Discovery
+
+The A2A spec defines three discovery strategies. We currently implement one fully
+and one partially:
+
+| Strategy              | Spec Status                    | Our Status                        |
+| --------------------- | ------------------------------ | --------------------------------- |
+| Well-Known URI        | Specified (RFC 8615)           | Done — `A2A.Plug` serves `GET /.well-known/agent-card.json` |
+| Curated Registries    | Acknowledged, no standard API  | Partial — `A2A.Registry` is local-only ETS |
+| Direct Configuration  | Mentioned                      | N/A — users hardcode URLs         |
+
+### Current Gaps
+
+**`A2A.Registry` is local-only.** It stores server-side `A2A.Agent.card()` maps
+(plain maps without URLs) in ETS. Useful for internal routing ("which of my
+agents handles finance?") but not for network-visible discovery. A remote client
+can't query it.
+
+**`A2A.Plug` serves a single agent's card.** Each Plug mount exposes one agent.
+There's no way to serve a directory of all agents from one endpoint.
+
+**No client-side discovery cache.** `A2A.Client.discover/2` fetches a remote
+card but doesn't store it. Repeated discovery hits the network every time.
+
+### Ideas
+
+**Multi-agent Plug / directory endpoint.** Wire `A2A.Registry` into `A2A.Plug`
+so a single HTTP endpoint can serve cards for all registered agents. Options:
+
+- Serve a JSON array at `/.well-known/agent-card.json` (non-standard but
+  practical — the spec doesn't prohibit it)
+- Serve per-agent cards at `/.well-known/agents/{name}/agent-card.json`
+- Add a query endpoint (e.g., `GET /agents?skill=finance`) — this would be a
+  step toward the curated registry concept, but the spec doesn't prescribe an
+  API for this yet
+
+This is the most impactful next step — it connects the local registry to the
+spec's Open Discovery mechanism.
+
+**Client-side agent cache.** An `A2A.Client.Registry` that caches discovered
+`%AgentCard{}` structs and supports `find_by_skill/2` across remote agents.
+Would enable patterns like: discover 10 agents at startup, then route to the
+best one based on skill tags at call time.
+
+**Registry change notifications.** The current registry is static after init.
+A `Phoenix.PubSub` or `:pg`-based notification system would let Plug endpoints
+update when agents come and go, and let distributed registries sync across nodes.
+
+**Standard registry API.** The A2A community is exploring standardizing registry
+interactions. If a standard emerges, implement it as a Plug endpoint so our
+agents can be registered in external catalogs.
+
+---
+
+## Future Work: Authentication & Security
+
+The A2A spec defines a comprehensive security model around the AgentCard. We
+currently implement none of it — auth is listed as out of scope for initial
+release, but this section captures the spec's requirements and ideas for
+incremental adoption.
+
+### What the Spec Defines
+
+**SecuritySchemes on AgentCard.** The public agent card can declare
+authentication requirements via two fields:
+
+- `securitySchemes` — a map of named scheme definitions, each containing exactly
+  one of: `apiKeySecurityScheme`, `httpAuthSecurityScheme`,
+  `oauth2SecurityScheme`, `openIdConnectSecurityScheme`, `mtlsSecurityScheme`
+- `security` — an array of `SecurityRequirement` objects specifying which
+  schemes apply globally
+
+Scheme types align with the OpenAPI Specification:
+
+| Scheme Type          | Use Case                                    |
+| -------------------- | ------------------------------------------- |
+| API Key              | Simple token in header/query                |
+| HTTP Auth            | Bearer tokens, Basic auth                   |
+| OAuth 2.0            | Authorization Code, Client Credentials, Device Code flows |
+| OpenID Connect       | OIDC discovery-based auth                   |
+| Mutual TLS           | Certificate-based bidirectional auth        |
+
+Clients are expected to: examine the public card's `securitySchemes`, obtain
+credentials out-of-band, and include them in every request per the scheme type.
+
+**Authenticated Extended Card.** The spec defines a two-tier card model:
+
+1. **Public card** — served unauthenticated at `/.well-known/agent-card.json`.
+   May advertise `supportsAuthenticatedExtendedCard: true`.
+2. **Extended card** — fetched via `GET {AgentCard.url}/../agent/authenticatedExtendedCard`
+   (or via JSON-RPC `agent/getAuthenticatedExtendedCard`). Requires
+   authentication using schemes declared in the public card. Returns additional
+   skills, capabilities, or configuration not visible publicly.
+
+This enables selective disclosure — different clients see different capabilities
+based on their identity and permissions.
+
+**Task-level authorization.** Servers must enforce access controls so clients
+only access their own tasks. The spec states: "Servers MUST NOT reveal the
+existence of resources the client is not authorized to access."
+
+**Push notification security.** Webhook endpoints for push notifications must
+validate origin and authenticate credential transmission.
+
+### Current State
+
+- `A2A.AgentCard` struct has no `security_schemes` or `security` fields
+- `A2A.JSON.encode_agent_card/2` doesn't encode security fields
+- `agent/getAuthenticatedExtendedCard` returns `unsupported_operation` error
+- `A2A.Plug` has no auth middleware — all requests are unauthenticated
+- No task-level access control — any caller can access any task by ID
+
+### Ideas
+
+**AgentCard security fields.** Add `security_schemes` and `security` to
+`%A2A.AgentCard{}` and to `A2A.JSON.encode_agent_card/2`. This is pure data
+modeling — no runtime behavior, just the ability to declare auth requirements
+in the card.
+
+**Auth plug middleware.** A composable `A2A.Plug.Auth` that:
+
+- Reads `securitySchemes` from the agent card
+- Validates credentials on incoming requests (Bearer token check, API key
+  lookup, etc.)
+- Returns `401` / `403` for invalid/missing credentials
+- Passes verified identity to the agent via `context.metadata`
+
+This should be a separate Plug that users compose before `A2A.Plug`, not built
+into `A2A.Plug` itself. The library provides the middleware; users supply the
+credential verification logic (e.g., "check this JWT against my JWKS endpoint").
+
+**Authenticated extended card.** Implement `agent/getAuthenticatedExtendedCard`:
+
+- Agent behaviour gets an optional `extended_card/1` callback that receives the
+  authenticated identity and returns an extended card
+- `A2A.Plug` serves it at the spec-defined endpoint, gated by auth middleware
+- Enables per-client capability disclosure
+
+**Client-side auth.** `A2A.Client` already accepts Req options (headers, etc.)
+so Bearer/API key auth works today via:
+
+```elixir
+A2A.Client.new(card, headers: [{"authorization", "Bearer tok"}])
+```
+
+More structured support could include: reading `securitySchemes` from a
+discovered card and prompting for credentials, or OAuth 2.0 Client Credentials
+flow built into the client.
+
+**Task access control.** A callback or plug that maps authenticated identity to
+allowed task IDs / context IDs. The runtime would check this before returning
+task data from `tasks/get` or `tasks/cancel`.
+
+### Recommended Order
+
+1. AgentCard security fields (data modeling, no runtime changes)
+2. Auth plug middleware (Bearer/API key — simplest schemes first)
+3. Authenticated extended card endpoint
+4. Client-side OAuth 2.0 flows
+5. Task-level access control
+
+---
+
 ## Dependencies (Expected)
 
 - `plug` — HTTP adapter
