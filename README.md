@@ -72,6 +72,9 @@ mix quality
 mix format --check-formatted
 mix credo --strict
 mix dialyzer
+
+# Run the example
+mix run examples/demo.exs
 ```
 
 Requires Elixir ~> 1.17.

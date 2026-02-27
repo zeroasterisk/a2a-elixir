@@ -2,17 +2,91 @@ defmodule A2A do
   @moduledoc """
   Elixir implementation of the Agent-to-Agent (A2A) protocol.
 
-  A2A enables AI agents to communicate and collaborate through a standardized
-  protocol built on JSON-RPC 2.0.
+  A2A provides a behaviour-based agent framework where agents are local
+  GenServer processes. Use `A2A.call/3` and `A2A.stream/3` to interact
+  with agents.
 
-  ## Planned Modules
+  ## Quick Start
 
-  - `A2A.AgentCard` — Agent card schema and discovery
-  - `A2A.Message` — Message and artifact types
-  - `A2A.Task` — Task lifecycle and state management
-  - `A2A.Router` — JSON-RPC method routing
-  - `A2A.TaskStore` — Pluggable task persistence
-  - `A2A.Plug` — Plug integration for serving A2A endpoints
-  - `A2A.Client` — HTTP client for calling remote A2A agents
+      # Define an agent
+      defmodule MyAgent do
+        use A2A.Agent,
+          name: "my-agent",
+          description: "Does things"
+
+        @impl A2A.Agent
+        def handle_message(message, _context) do
+          {:reply, [A2A.Part.Text.new("Got: \#{A2A.Message.text(message)}")]}
+        end
+      end
+
+      # Start and call it
+      {:ok, _pid} = MyAgent.start_link()
+      {:ok, task} = A2A.call(MyAgent, "hello")
   """
+
+  @doc """
+  Sends a message to a local agent and returns the resulting task.
+
+  The `agent` can be a module name (registered GenServer) or a PID.
+  The `message` can be a string, an `A2A.Message.t()`, or a list of parts.
+
+  ## Options
+
+  - `:context_id` — associate the message with a conversation context
+  - `:task_id` — continue an existing task (must be in `:input_required` state)
+
+  ## Examples
+
+      A2A.call(MyAgent, "hello")
+      A2A.call(MyAgent, message, context_id: "ctx-123")
+
+      # Multi-turn: continue an input_required task
+      {:ok, task} = A2A.call(MyAgent, "order pizza")
+      {:ok, task} = A2A.call(MyAgent, "large", task_id: task.id)
+  """
+  @spec call(GenServer.server(), String.t() | A2A.Message.t(), keyword()) ::
+          {:ok, A2A.Task.t()} | {:error, term()}
+  def call(agent, message, opts \\ [])
+
+  def call(agent, message, opts) when is_binary(message) do
+    call(agent, A2A.Message.new_user(message), opts)
+  end
+
+  def call(agent, %A2A.Message{} = message, opts) do
+    GenServer.call(agent, {:message, message, opts})
+  end
+
+  @doc """
+  Sends a message to a streaming agent and returns the stream.
+
+  The agent's `handle_message/2` must return `{:stream, enumerable}`.
+  The returned stream is lazy — the caller must consume it.
+
+  ## Examples
+
+      A2A.stream(MyAgent, "research topic")
+      |> Stream.each(&process/1)
+      |> Stream.run()
+  """
+  @spec stream(GenServer.server(), String.t() | A2A.Message.t(), keyword()) ::
+          {:ok, A2A.Task.t(), Enumerable.t()} | {:error, term()}
+  def stream(agent, message, opts \\ [])
+
+  def stream(agent, message, opts) when is_binary(message) do
+    stream(agent, A2A.Message.new_user(message), opts)
+  end
+
+  def stream(agent, %A2A.Message{} = message, opts) do
+    case GenServer.call(agent, {:message, message, opts}) do
+      {:ok, %A2A.Task{metadata: %{stream: enum}} = task} ->
+        {:ok, task, enum}
+
+      {:ok, task} ->
+        {:error, {:not_streaming, task}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
 end
