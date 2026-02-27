@@ -434,6 +434,42 @@ Served at `GET /.well-known/agent-card.json`.
 
 **TransportProtocol** enum: `"JSONRPC"`, `"GRPC"`, `"HTTP+JSON"`
 
+#### AgentCard — Elixir Representations
+
+The agent card has **two Elixir representations** that serve different roles:
+
+**`A2A.Agent.card()` (server-side)** — a plain map returned by `agent_card/0`:
+
+```elixir
+%{name: "greeter", description: "Greets users", version: "1.0.0",
+  skills: [...], opts: []}
+```
+
+This is an **identity declaration** — it describes what the agent *is*, not where
+it lives. Deployment details (URL, capabilities, provider) are unknown to the
+agent module and are supplied by the HTTP layer (`A2A.Plug`) at encoding time via
+`A2A.JSON.encode_agent_card/2`.
+
+**`%A2A.AgentCard{}` (client-side)** — a struct decoded from the wire format:
+
+```elixir
+%A2A.AgentCard{
+  name: "greeter", description: "Greets users",
+  url: "https://agent.example.com", version: "1.0.0",
+  skills: [...], capabilities: %{streaming: true}, ...
+}
+```
+
+This is a **complete wire-format card** — it includes all fields a client needs
+to communicate with the agent.
+
+**Why not unify?** Server-side agents can't produce a complete AgentCard because
+they don't know their own URL or deployment-specific capabilities — those are
+determined by the HTTP layer. The current split (agent defines identity, Plug
+adds deployment details) keeps concerns separated. A future refactor could have
+`A2A.Plug` construct `%AgentCard{}` internally, but changing `agent_card/0`'s
+return type would break the `A2A.Agent` behaviour contract.
+
 ### Streaming (SSE)
 
 Triggered by `message/stream` or `tasks/resubscribe`. The server responds with
@@ -536,6 +572,18 @@ Complete field mapping between Elixir structs and JSON wire format:
 | `A2A.FileContent` | `mime_type`          | `mimeType`           | snake → camel      |
 | `A2A.FileContent` | `bytes`              | `bytes`              | binary → base64    |
 | `A2A.FileContent` | `uri`                | `uri`                | —                  |
+| `A2A.AgentCard`   | `name`               | `name`               | —                  |
+| `A2A.AgentCard`   | `description`        | `description`        | —                  |
+| `A2A.AgentCard`   | `url`                | `url`                | —                  |
+| `A2A.AgentCard`   | `version`            | `version`            | —                  |
+| `A2A.AgentCard`   | `skills`             | `skills`             | list of skill maps |
+| `A2A.AgentCard`   | `capabilities`       | `capabilities`       | atom keys ↔ camel  |
+| `A2A.AgentCard`   | `default_input_modes`| `defaultInputModes`  | snake → camel      |
+| `A2A.AgentCard`   | `default_output_modes`| `defaultOutputModes`| snake → camel      |
+| `A2A.AgentCard`   | `provider`           | `provider`           | atom keys ↔ string |
+| `A2A.AgentCard`   | `documentation_url`  | `documentationUrl`   | snake → camel      |
+| `A2A.AgentCard`   | `icon_url`           | `iconUrl`            | snake → camel      |
+| `A2A.AgentCard`   | `protocol_version`   | `protocolVersion`    | snake → camel      |
 
 ---
 
@@ -735,23 +783,35 @@ forward "/a2a/pricing", A2A.Plug, agent: MyApp.PricingAgent
 
 ### A2A Client (`A2A.Client`)
 
-HTTP client for consuming external A2A agents:
+HTTP client for consuming external A2A agents. Requires `req` (optional dep).
+All functions accept `%A2A.Client{}`, `%A2A.AgentCard{}`, or a URL string.
 
 ```elixir
+# Discover an agent
 {:ok, card} = A2A.Client.discover("https://pizza-agent.example.com")
 
-# Synchronous
-{:ok, task} = A2A.Client.send_message(card, "Large margherita to Sveavägen 12")
+# Create a reusable client (optional — carries Req config)
+client = A2A.Client.new(card, headers: [{"authorization", "Bearer tok"}])
 
-# Streaming
-A2A.Client.stream_message(card, "Research quantum computing")
-|> Stream.each(fn part -> IO.puts(part.text) end)
-|> Stream.run()
+# Synchronous
+{:ok, task} = A2A.Client.send_message(client, "Large margherita to Sveavägen 12")
+
+# Streaming — yields decoded event structs
+{:ok, stream} = A2A.Client.stream_message(client, "Research quantum computing")
+Enum.each(stream, fn
+  %A2A.Event.StatusUpdate{final: true} -> :done
+  %A2A.Event.ArtifactUpdate{artifact: art} -> IO.inspect(art)
+  event -> IO.inspect(event)
+end)
 
 # Multi-turn
-{:ok, task} = A2A.Client.send_message(card, "Order a pizza")
-{:ok, task} = A2A.Client.send_message(card, "Large, pepperoni",
-  context_id: task.context_id, task_id: task.id)
+{:ok, task} = A2A.Client.send_message(client, "Order a pizza")
+{:ok, task} = A2A.Client.send_message(client, "Large, pepperoni",
+  task_id: task.id, context_id: task.context_id)
+
+# Task management
+{:ok, task} = A2A.Client.get_task(client, task.id)
+{:ok, task} = A2A.Client.cancel_task(client, task.id)
 ```
 
 ### Task Store
@@ -798,6 +858,7 @@ Agents are registered in the internal registry on start. Supervised with restart
 | Phoenix optional                          | `A2A.Plug` works with bare Plug or Phoenix; `A2A.Server` for standalone    |
 | Agent card from code                      | Single source of truth for internal registry and external discovery         |
 | `{:delegate, agent, message}` reply type  | First-class agent-to-agent forwarding without manual routing               |
+| Two AgentCard representations             | Server agents declare identity (plain map); clients receive full wire card (`%AgentCard{}` struct). Agents don't know their URL — Plug adds deployment details at encoding time. |
 
 ---
 
@@ -810,7 +871,7 @@ Agents are registered in the internal registry on start. Supervised with restart
 | 3     | Done    | JSON codec (`A2A.JSON`) — Elixir structs ↔ camelCase JSON         |
 | 4     | Done    | JSON-RPC layer — request/response parsing, method dispatch, error types |
 | 5     | Done    | HTTP server (`A2A.Plug`) — agent card endpoint, JSON-RPC POST, SSE |
-| 6     | Next    | HTTP client (`A2A.Client`) — discover, send_message, stream via Req |
+| 6     | Done    | HTTP client (`A2A.Client`) — discover, send_message, stream via Req; `A2A.AgentCard` struct |
 | 7     | —       | Registry + Supervisor — agent discovery, supervised startup        |
 | 8     | —       | `{:delegate, agent, msg}` — agent-to-agent forwarding             |
 

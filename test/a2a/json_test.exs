@@ -854,6 +854,135 @@ defmodule A2A.JSONTest do
   end
 
   # -------------------------------------------------------------------
+  # AgentCard decoding
+  # -------------------------------------------------------------------
+
+  describe "decode_agent_card/1" do
+    test "decodes minimal card" do
+      map = %{
+        "name" => "test-agent",
+        "description" => "A test agent",
+        "url" => "https://example.com/a2a",
+        "version" => "1.0.0",
+        "skills" => [
+          %{
+            "id" => "greet",
+            "name" => "Greet",
+            "description" => "Says hello",
+            "tags" => ["greeting"]
+          }
+        ]
+      }
+
+      {:ok, card} = JSON.decode_agent_card(map)
+
+      assert card.name == "test-agent"
+      assert card.description == "A test agent"
+      assert card.url == "https://example.com/a2a"
+      assert card.version == "1.0.0"
+      assert [%{id: "greet", name: "Greet", tags: ["greeting"]}] = card.skills
+      assert card.capabilities == %{}
+      assert card.default_input_modes == ["text/plain"]
+      assert card.default_output_modes == ["text/plain"]
+      assert card.provider == nil
+    end
+
+    test "decodes full card with all optional fields" do
+      map = %{
+        "name" => "full-agent",
+        "description" => "Full agent",
+        "url" => "https://example.com/a2a",
+        "version" => "2.0.0",
+        "skills" => [],
+        "capabilities" => %{
+          "streaming" => true,
+          "pushNotifications" => false,
+          "stateTransitionHistory" => true
+        },
+        "defaultInputModes" => ["text/plain", "application/json"],
+        "defaultOutputModes" => ["text/plain"],
+        "provider" => %{
+          "organization" => "Acme",
+          "url" => "https://acme.example.com"
+        },
+        "documentationUrl" => "https://docs.example.com",
+        "iconUrl" => "https://example.com/icon.png",
+        "protocolVersion" => "0.3"
+      }
+
+      {:ok, card} = JSON.decode_agent_card(map)
+
+      assert card.capabilities == %{
+               streaming: true,
+               push_notifications: false,
+               state_transition_history: true
+             }
+
+      assert card.default_input_modes == ["text/plain", "application/json"]
+      assert card.provider == %{organization: "Acme", url: "https://acme.example.com"}
+      assert card.documentation_url == "https://docs.example.com"
+      assert card.icon_url == "https://example.com/icon.png"
+      assert card.protocol_version == "0.3"
+    end
+
+    test "returns error for missing required field" do
+      assert {:error, {:missing_field, "name"}} =
+               JSON.decode_agent_card(%{
+                 "description" => "x",
+                 "url" => "x",
+                 "version" => "1",
+                 "skills" => []
+               })
+    end
+
+    test "returns error for missing skill field" do
+      assert {:error, {:missing_field, "id"}} =
+               JSON.decode_agent_card(%{
+                 "name" => "x",
+                 "description" => "x",
+                 "url" => "x",
+                 "version" => "1",
+                 "skills" => [%{"name" => "s", "description" => "d"}]
+               })
+    end
+
+    test "roundtrip encode_agent_card -> decode_agent_card" do
+      card = %{
+        name: "roundtrip",
+        description: "Roundtrip test",
+        version: "1.0.0",
+        skills: [
+          %{id: "s1", name: "Skill One", description: "Does stuff", tags: ["tag1"]}
+        ],
+        opts: []
+      }
+
+      encoded =
+        JSON.encode_agent_card(card,
+          url: "https://example.com",
+          capabilities: %{streaming: true},
+          provider: %{organization: "Org", url: "https://org.example.com"},
+          documentation_url: "https://docs.example.com",
+          icon_url: "https://icon.example.com",
+          protocol_version: "0.3"
+        )
+
+      {:ok, decoded} = JSON.decode_agent_card(encoded)
+
+      assert decoded.name == "roundtrip"
+      assert decoded.description == "Roundtrip test"
+      assert decoded.url == "https://example.com"
+      assert decoded.version == "1.0.0"
+      assert [%{id: "s1", name: "Skill One", tags: ["tag1"]}] = decoded.skills
+      assert decoded.capabilities == %{streaming: true}
+      assert decoded.provider == %{organization: "Org", url: "https://org.example.com"}
+      assert decoded.documentation_url == "https://docs.example.com"
+      assert decoded.icon_url == "https://icon.example.com"
+      assert decoded.protocol_version == "0.3"
+    end
+  end
+
+  # -------------------------------------------------------------------
   # Error propagation in nested structures
   # -------------------------------------------------------------------
 

@@ -236,6 +236,52 @@ defmodule A2A.JSON do
     map
   end
 
+  @doc """
+  Decodes a JSON map into an `%A2A.AgentCard{}` struct.
+
+  Returns `{:ok, agent_card}` on success or `{:error, reason}` on failure.
+
+  ## Example
+
+      iex> map = %{
+      ...>   "name" => "test",
+      ...>   "description" => "A test agent",
+      ...>   "url" => "https://example.com",
+      ...>   "version" => "1.0.0",
+      ...>   "skills" => [
+      ...>     %{"id" => "s1", "name" => "Skill", "description" => "Does things", "tags" => []}
+      ...>   ]
+      ...> }
+      iex> {:ok, card} = A2A.JSON.decode_agent_card(map)
+      iex> card.name
+      "test"
+  """
+  @spec decode_agent_card(map()) :: {:ok, A2A.AgentCard.t()} | {:error, term()}
+  def decode_agent_card(map) when is_map(map) do
+    with {:ok, name} <- require_field(map, "name"),
+         {:ok, description} <- require_field(map, "description"),
+         {:ok, url} <- require_field(map, "url"),
+         {:ok, version} <- require_field(map, "version"),
+         {:ok, skills_list} <- require_field(map, "skills"),
+         {:ok, skills} <- decode_card_skills(skills_list) do
+      {:ok,
+       %A2A.AgentCard{
+         name: name,
+         description: description,
+         url: url,
+         version: version,
+         skills: skills,
+         capabilities: decode_card_capabilities(Map.get(map, "capabilities", %{})),
+         default_input_modes: Map.get(map, "defaultInputModes", ["text/plain"]),
+         default_output_modes: Map.get(map, "defaultOutputModes", ["text/plain"]),
+         provider: decode_card_provider(Map.get(map, "provider")),
+         documentation_url: Map.get(map, "documentationUrl"),
+         icon_url: Map.get(map, "iconUrl"),
+         protocol_version: Map.get(map, "protocolVersion")
+       }}
+    end
+  end
+
   # -------------------------------------------------------------------
   # Decoding
   # -------------------------------------------------------------------
@@ -564,5 +610,66 @@ defmodule A2A.JSON do
          metadata: Map.get(map, "metadata", %{})
        }}
     end
+  end
+
+  # -------------------------------------------------------------------
+  # Private — AgentCard decoding helpers
+  # -------------------------------------------------------------------
+
+  defp decode_card_skills(skills) when is_list(skills) do
+    Enum.reduce_while(skills, {:ok, []}, fn skill, {:ok, acc} ->
+      with {:ok, id} <- require_field(skill, "id"),
+           {:ok, name} <- require_field(skill, "name"),
+           {:ok, description} <- require_field(skill, "description") do
+        decoded = %{
+          id: id,
+          name: name,
+          description: description,
+          tags: Map.get(skill, "tags", [])
+        }
+
+        {:cont, {:ok, [decoded | acc]}}
+      else
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, list} -> {:ok, Enum.reverse(list)}
+      error -> error
+    end
+  end
+
+  defp decode_card_skills(_), do: {:error, {:invalid_field, "skills"}}
+
+  defp decode_card_capabilities(nil), do: %{}
+
+  defp decode_card_capabilities(map) when is_map(map) do
+    result = %{}
+
+    result =
+      case Map.get(map, "streaming") do
+        nil -> result
+        val -> Map.put(result, :streaming, val)
+      end
+
+    result =
+      case Map.get(map, "pushNotifications") do
+        nil -> result
+        val -> Map.put(result, :push_notifications, val)
+      end
+
+    case Map.get(map, "stateTransitionHistory") do
+      nil -> result
+      val -> Map.put(result, :state_transition_history, val)
+    end
+  end
+
+  defp decode_card_provider(nil), do: nil
+
+  defp decode_card_provider(map) when is_map(map) do
+    %{
+      organization: Map.get(map, "organization"),
+      url: Map.get(map, "url")
+    }
   end
 end
