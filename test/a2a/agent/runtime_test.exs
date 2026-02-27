@@ -136,4 +136,27 @@ defmodule A2A.Agent.RuntimeTest do
       assert task.context_id == "ctx-1"
     end
   end
+
+  describe "with TaskStore" do
+    setup do
+      table = :"store_rt_#{System.unique_integer([:positive])}"
+      start_supervised!({A2A.TaskStore.ETS, name: table})
+
+      pid =
+        start_supervised!(
+          {A2A.Test.EchoAgent,
+           name: :"stored_#{System.unique_integer()}", task_store: {A2A.TaskStore.ETS, table}}
+        )
+
+      %{pid: pid, table: table}
+    end
+
+    test "tasks are persisted to external store", %{pid: pid, table: table} do
+      msg = Message.new_user("persist me")
+      {:ok, task} = A2A.Test.EchoAgent.call(pid, msg)
+      assert {:ok, stored} = A2A.TaskStore.ETS.get(table, task.id)
+      assert stored.id == task.id
+      assert stored.status.state == :completed
+    end
+  end
 end

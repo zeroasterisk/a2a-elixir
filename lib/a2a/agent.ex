@@ -45,8 +45,8 @@ defmodule A2A.Agent do
     tasks, calls `handle_message/2`, maps reply tuples to state transitions.
     Also handles task continuation (multi-turn) and stream wrapping.
   - **`A2A.Agent.State`** — the internal GenServer state struct. Holds the
-    task map and context index. Provides helpers for task storage, retrieval,
-  and state transitions.
+    task map, context index, and optional task store reference. Provides
+    helpers for task storage, retrieval, and state transitions.
 
   ## Task Lifecycle
 
@@ -92,12 +92,21 @@ defmodule A2A.Agent do
   ## Persistence
 
   By default, tasks live in the GenServer's process state (in-memory map).
-  The runtime writes every task update to the internal map.
+  For external persistence, pass a task store at startup:
+
+      MyAgent.start_link(task_store: {A2A.TaskStore.ETS, :my_table})
+
+  The runtime writes every task update to both the internal map and the
+  external store. See `A2A.TaskStore` for the behaviour interface.
 
   ## Starting an Agent
 
       {:ok, pid} = MyAgent.start_link()
       {:ok, task} = A2A.call(MyAgent, "hello")
+
+  Or with options:
+
+      MyAgent.start_link(name: :my_agent, task_store: {A2A.TaskStore.ETS, :tasks})
   """
 
   @type card :: %{
@@ -177,6 +186,7 @@ defmodule A2A.Agent do
       ## Options
 
       - `:name` — process registration name (default: module name)
+      - `:task_store` — `{module, opts}` tuple for external task persistence
       """
       @spec start_link(keyword()) :: GenServer.on_start()
       def start_link(opts \\ []) do
@@ -215,9 +225,12 @@ defmodule A2A.Agent do
 
       @impl GenServer
       def init(opts) do
+        task_store = Keyword.get(opts, :task_store)
+
         {:ok,
          %A2A.Agent.State{
            module: __MODULE__,
+           task_store: task_store
          }}
       end
 
