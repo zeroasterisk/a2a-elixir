@@ -14,17 +14,17 @@ This library fills that gap: a unified agent contract where A2A protocol export 
 
 ```
 ┌──────────────────────────────────────────────────┐
-│              A2A.Agent Behaviour                  │
+│              A2A.Agent Behaviour                 │
 │  skills/0 · handle_message/2 · handle_cancel/1   │
 └───────┬──────────────────────────────┬───────────┘
         │                              │
   ┌─────▼──────┐               ┌───────▼────────┐
-  │  Internal   │               │   External     │
-  │  GenServer  │               │   A2A.Plug     │
-  │  Registry   │               │   JSON-RPC 2.0 │
-  │  Streams    │               │   SSE/HTTP     │
+  │  Internal  │               │   External     │
+  │  GenServer │               │   A2A.Plug     │
+  │  Registry  │               │   JSON-RPC 2.0 │
+  │  Streams   │               │   SSE/HTTP     │
   └────────────┘               │   Agent Cards  │
-                                └────────────────┘
+                               └────────────────┘
 ```
 
 Agents are internal OTP processes by default. Selected agents are exposed externally via A2A protocol through configuration. The router provides location-transparent dispatch — callers don't know or care whether a target agent is local or remote.
@@ -33,14 +33,14 @@ Agents are internal OTP processes by default. Selected agents are exposed extern
 ┌─────────────────────────────────┐
 │   Your System (OTP)             │
 │                                 │
-│  ┌───────────┐  ┌───────────┐  │
-│  │  Agent A   │  │  Agent B  │  │     External
-│  │ (internal) │  │ (internal)│  │     A2A Agent
-│  └─────┬─────┘  └─────┬─────┘  │        ▲
-│        └──────┬────────┘        │        │
-│          ┌────▼─────┐           │        │
-│          │  Gateway  │──── A2A.Plug ─────┘
-│          │  Agent    │          │
+│  ┌───────────┐   ┌───────────┐  │
+│  │  Agent A  │   │  Agent B  │  │    External
+│  │ (internal)│   │ (internal)│  │    A2A Agent
+│  └─────┬─────┘   └─────┬─────┘  │       ▲
+│        └──────┬────────┘        │       │
+│          ┌────▼─────┐           │       │
+│          │  Gateway │──── A2A.Plug ─────┘
+│          │  Agent   │           │
 │          └──────────┘           │
 └─────────────────────────────────┘
 ```
@@ -53,9 +53,9 @@ The Agent-to-Agent (A2A) protocol is an open standard by Google (now under the L
 
 ### Key Protocol Concepts
 
-- **Agent Card**: JSON metadata at `/.well-known/agent.json` describing identity, capabilities, skills, auth, and endpoint URL.
+- **Agent Card**: JSON metadata at `/.well-known/agent-card.json` describing identity, capabilities, skills, auth, and endpoint URL.
 - **Transport**: HTTP(S) with JSON-RPC 2.0 payloads. SSE for streaming. gRPC as alternative binding (v0.3+).
-- **Task**: Server-side unit of work with lifecycle: `submitted → working → completed | failed | canceled | input_required`.
+- **Task**: Server-side unit of work with lifecycle: `submitted → working → completed | failed | canceled | input_required | rejected | auth_required`.
 - **Message**: A single turn of communication (role: `user` | `agent`), containing typed **Parts** (text, file, structured data).
 - **Artifact**: The output/result of a completed task.
 - **Context** (`contextId`): Groups related tasks into a session for multi-turn conversations.
@@ -63,12 +63,18 @@ The Agent-to-Agent (A2A) protocol is an open standard by Google (now under the L
 
 ### Core RPC Methods
 
-| Method           | Purpose                                    |
-| ---------------- | ------------------------------------------ |
-| `message/send`   | Send a message, get a synchronous response |
-| `message/stream` | Send a message, receive SSE stream         |
-| `tasks/get`      | Poll task status                           |
-| `tasks/cancel`   | Cancel a running task                      |
+| Method                                     | Purpose                               |
+| ------------------------------------------ | ------------------------------------- |
+| `message/send`                             | Send a message, synchronous response  |
+| `message/stream`                           | Send a message, receive SSE stream    |
+| `tasks/get`                                | Poll task status                      |
+| `tasks/cancel`                             | Cancel a running task                 |
+| `tasks/resubscribe`                        | Re-subscribe to task SSE stream       |
+| `tasks/pushNotificationConfig/set`         | Configure push notification webhook   |
+| `tasks/pushNotificationConfig/get`         | Get push notification config          |
+| `tasks/pushNotificationConfig/list`        | List push notification configs        |
+| `tasks/pushNotificationConfig/delete`      | Delete push notification config       |
+| `agent/getAuthenticatedExtendedCard`       | Get authenticated agent card          |
 
 ### Relationship to MCP
 
@@ -154,6 +160,382 @@ Reply types:
 # Pre-processing hook for auth context, rate limiting, validation
 @callback handle_init(message(), map()) :: {:ok, map()} | {:error, String.t()}
 ```
+
+---
+
+## Wire Protocol (A2A v0.3)
+
+This section documents the A2A wire format — the JSON schemas, JSON-RPC binding,
+SSE streaming format, and error codes that inform the `A2A.JSON` codec,
+`A2A.Plug` server, and `A2A.Client` implementations.
+
+### JSON-RPC 2.0 Binding
+
+All A2A communication uses HTTP POST with JSON-RPC 2.0 envelopes (except agent
+card discovery, which is a plain HTTP GET).
+
+#### Request Envelope
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "method": "message/send",
+  "params": { ... }
+}
+```
+
+#### Success Response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "result": { ... }
+}
+```
+
+#### Error Response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "error": {
+    "code": -32001,
+    "message": "Task not found",
+    "data": null
+  }
+}
+```
+
+#### Error Codes
+
+Standard JSON-RPC 2.0 codes:
+
+| Code     | Name                  | Default Message                    |
+| -------- | --------------------- | ---------------------------------- |
+| `-32700` | JSONParseError        | Invalid JSON payload               |
+| `-32600` | InvalidRequestError   | Request payload validation error   |
+| `-32601` | MethodNotFoundError   | Method not found                   |
+| `-32602` | InvalidParamsError    | Invalid parameters                 |
+| `-32603` | InternalError         | Internal error                     |
+
+A2A-specific codes:
+
+| Code     | Name                                             | Default Message                                    |
+| -------- | ------------------------------------------------ | -------------------------------------------------- |
+| `-32001` | TaskNotFoundError                                | Task not found                                     |
+| `-32002` | TaskNotCancelableError                           | Task cannot be canceled                            |
+| `-32003` | PushNotificationNotSupportedError                | Push Notification is not supported                 |
+| `-32004` | UnsupportedOperationError                        | This operation is not supported                    |
+| `-32005` | ContentTypeNotSupportedError                     | Incompatible content types                         |
+| `-32006` | InvalidAgentResponseError                        | Invalid agent response                             |
+| `-32007` | AuthenticatedExtendedCardNotConfiguredError      | Authenticated Extended Card is not configured      |
+
+### Request Params
+
+#### `MessageSendParams` — used by `message/send` and `message/stream`
+
+| Field           | Type                       | Required |
+| --------------- | -------------------------- | -------- |
+| `message`       | Message                    | yes      |
+| `configuration` | MessageSendConfiguration   | no       |
+| `metadata`      | object                     | no       |
+
+#### `MessageSendConfiguration`
+
+| Field                    | Type                     | Required |
+| ------------------------ | ------------------------ | -------- |
+| `blocking`               | boolean                  | no       |
+| `historyLength`          | integer                  | no       |
+| `acceptedOutputModes`    | string[]                 | no       |
+| `pushNotificationConfig` | PushNotificationConfig   | no       |
+
+#### `TaskQueryParams` — used by `tasks/get`
+
+| Field           | Type    | Required |
+| --------------- | ------- | -------- |
+| `id`            | string  | yes      |
+| `historyLength` | integer | no       |
+| `metadata`      | object  | no       |
+
+#### `TaskIdParams` — used by `tasks/cancel`, `tasks/resubscribe`
+
+| Field      | Type   | Required |
+| ---------- | ------ | -------- |
+| `id`       | string | yes      |
+| `metadata` | object | no       |
+
+### Data Schemas
+
+All JSON field names use **camelCase**. The `kind` field is the discriminator
+for Parts, Messages, Tasks, and streaming events.
+
+#### Task (`kind: "task"`)
+
+| JSON Field   | Type         | Required | Elixir Field  |
+| ------------ | ------------ | -------- | ------------- |
+| `id`         | string       | yes      | `id`          |
+| `contextId`  | string       | yes      | `context_id`  |
+| `status`     | TaskStatus   | yes      | `status`      |
+| `history`    | Message[]    | no       | `history`     |
+| `artifacts`  | Artifact[]   | no       | `artifacts`   |
+| `metadata`   | object       | no       | `metadata`    |
+| `kind`       | `"task"`     | yes      | _(literal)_   |
+
+#### TaskStatus
+
+| JSON Field  | Type       | Required | Elixir Field |
+| ----------- | ---------- | -------- | ------------ |
+| `state`     | TaskState  | yes      | `state`      |
+| `message`   | Message    | no       | `message`    |
+| `timestamp` | string     | no       | `timestamp`  |
+
+**TaskState** enum — wire values are hyphenated lowercase:
+
+| Wire Value         | Elixir Atom       |
+| ------------------ | ----------------- |
+| `"submitted"`      | `:submitted`      |
+| `"working"`        | `:working`        |
+| `"input-required"` | `:input_required` |
+| `"completed"`      | `:completed`      |
+| `"canceled"`       | `:canceled`       |
+| `"failed"`         | `:failed`         |
+| `"rejected"`       | `:rejected`       |
+| `"auth-required"`  | `:auth_required`  |
+| `"unknown"`        | `:unknown`        |
+
+#### Message (`kind: "message"`)
+
+| JSON Field         | Type     | Required | Elixir Field       |
+| ------------------ | -------- | -------- | ------------------ |
+| `messageId`        | string   | yes      | `message_id`       |
+| `role`             | string   | yes      | `role`             |
+| `parts`            | Part[]   | yes      | `parts`            |
+| `taskId`           | string   | no       | `task_id`          |
+| `contextId`        | string   | no       | `context_id`       |
+| `referenceTaskIds` | string[] | no       | _(not yet)_        |
+| `extensions`       | string[] | no       | `extensions`       |
+| `metadata`         | object   | no       | `metadata`         |
+| `kind`             | `"message"` | yes   | _(literal)_        |
+
+**Role** enum: `"user"` → `:user`, `"agent"` → `:agent`
+
+#### Part — discriminated union on `kind`
+
+**TextPart** (`kind: "text"`):
+
+| JSON Field | Type     | Required | Elixir Field |
+| ---------- | -------- | -------- | ------------ |
+| `text`     | string   | yes      | `text`       |
+| `metadata` | object   | no       | `metadata`   |
+| `kind`     | `"text"` | yes      | `kind`       |
+
+**FilePart** (`kind: "file"`):
+
+| JSON Field | Type        | Required | Elixir Field |
+| ---------- | ----------- | -------- | ------------ |
+| `file`     | FileContent | yes      | `file`       |
+| `metadata` | object      | no       | `metadata`   |
+| `kind`     | `"file"`    | yes      | `kind`       |
+
+**DataPart** (`kind: "data"`):
+
+| JSON Field | Type       | Required | Elixir Field |
+| ---------- | ---------- | -------- | ------------ |
+| `data`     | any        | yes      | `data`       |
+| `metadata` | object     | no       | `metadata`   |
+| `kind`     | `"data"`   | yes      | `kind`       |
+
+#### FileContent
+
+Wire format is either `FileWithBytes` or `FileWithUri` (at least one of
+`bytes` or `uri` must be present):
+
+| JSON Field | Type   | Required | Elixir Field |
+| ---------- | ------ | -------- | ------------ |
+| `bytes`    | string | no*      | `bytes`      |
+| `uri`      | string | no*      | `uri`        |
+| `name`     | string | no       | `name`       |
+| `mimeType` | string | no       | `mime_type`  |
+
+`bytes` is base64-encoded on the wire.
+
+#### Artifact
+
+| JSON Field    | Type     | Required | Elixir Field  |
+| ------------- | -------- | -------- | ------------- |
+| `artifactId`  | string   | yes      | `artifact_id` |
+| `name`        | string   | no       | `name`        |
+| `description` | string   | no       | `description` |
+| `parts`       | Part[]   | yes      | `parts`       |
+| `extensions`  | string[] | no       | _(not yet)_   |
+| `metadata`    | object   | no       | `metadata`    |
+
+#### AgentCard
+
+Served at `GET /.well-known/agent-card.json`.
+
+| JSON Field                          | Type                | Required |
+| ----------------------------------- | ------------------- | -------- |
+| `name`                              | string              | yes      |
+| `description`                       | string              | yes      |
+| `url`                               | string              | yes      |
+| `version`                           | string              | yes      |
+| `skills`                            | AgentSkill[]        | yes      |
+| `capabilities`                      | AgentCapabilities   | yes      |
+| `defaultInputModes`                 | string[]            | yes      |
+| `defaultOutputModes`                | string[]            | yes      |
+| `provider`                          | AgentProvider       | no       |
+| `documentationUrl`                  | string              | no       |
+| `iconUrl`                           | string              | no       |
+| `protocolVersion`                   | string              | no       |
+| `securitySchemes`                   | map<string, SecurityScheme> | no |
+| `security`                          | SecurityRequirement[] | no     |
+| `additionalInterfaces`              | AgentInterface[]    | no       |
+| `preferredTransport`                | TransportProtocol   | no       |
+| `supportsAuthenticatedExtendedCard` | boolean             | no       |
+
+#### AgentSkill
+
+| JSON Field    | Type     | Required |
+| ------------- | -------- | -------- |
+| `id`          | string   | yes      |
+| `name`        | string   | yes      |
+| `description` | string   | yes      |
+| `tags`        | string[] | yes      |
+| `examples`    | string[] | no       |
+| `inputModes`  | string[] | no       |
+| `outputModes` | string[] | no       |
+
+#### AgentCapabilities
+
+| JSON Field               | Type              | Required |
+| ------------------------ | ----------------- | -------- |
+| `streaming`              | boolean           | no       |
+| `pushNotifications`      | boolean           | no       |
+| `stateTransitionHistory` | boolean           | no       |
+| `extensions`             | AgentExtension[]  | no       |
+
+#### AgentProvider
+
+| JSON Field     | Type   | Required |
+| -------------- | ------ | -------- |
+| `organization` | string | yes      |
+| `url`          | string | yes      |
+
+#### AgentInterface
+
+| JSON Field  | Type              | Required |
+| ----------- | ----------------- | -------- |
+| `transport` | TransportProtocol | yes      |
+| `url`       | string            | yes      |
+
+**TransportProtocol** enum: `"JSONRPC"`, `"GRPC"`, `"HTTP+JSON"`
+
+### Streaming (SSE)
+
+Triggered by `message/stream` or `tasks/resubscribe`. The server responds with
+`Content-Type: text/event-stream`.
+
+Each SSE event uses only the `data:` field (no `event:` or `id:` fields):
+
+```
+data: {"jsonrpc":"2.0","id":"1","result":{...}}\n\n
+```
+
+Each `data:` payload is a complete JSON-RPC 2.0 success response. The `result`
+object is discriminated by `kind`:
+
+- `"task"` — full Task snapshot
+- `"message"` — agent Message (non-task response)
+- `"status-update"` — TaskStatusUpdateEvent
+- `"artifact-update"` — TaskArtifactUpdateEvent
+
+#### TaskStatusUpdateEvent (`kind: "status-update"`)
+
+| JSON Field  | Type       | Required |
+| ----------- | ---------- | -------- |
+| `taskId`    | string     | yes      |
+| `contextId` | string     | yes      |
+| `status`    | TaskStatus | yes      |
+| `final`     | boolean    | yes      |
+| `metadata`  | object     | no       |
+| `kind`      | `"status-update"` | yes |
+
+When `final` is `true`, the stream closes after this event.
+
+#### TaskArtifactUpdateEvent (`kind: "artifact-update"`)
+
+| JSON Field  | Type     | Required |
+| ----------- | -------- | -------- |
+| `taskId`    | string   | yes      |
+| `contextId` | string   | yes      |
+| `artifact`  | Artifact | yes      |
+| `append`    | boolean  | no       |
+| `lastChunk` | boolean  | no       |
+| `metadata`  | object   | no       |
+| `kind`      | `"artifact-update"` | yes |
+
+#### Stream Lifecycle
+
+1. Client sends `message/stream` JSON-RPC request via HTTP POST
+2. Server responds with `Content-Type: text/event-stream`
+3. Server emits `Task`/`Message` events as work progresses
+4. `TaskStatusUpdateEvent` events on state transitions
+5. `TaskArtifactUpdateEvent` events as artifacts are produced
+6. Final `TaskStatusUpdateEvent` with `final: true` closes the stream
+7. Client can reconnect with `tasks/resubscribe` if connection drops
+
+### Discovery
+
+- **Public card**: `GET /.well-known/agent-card.json` — unauthenticated
+- **Extended card**: `agent/getAuthenticatedExtendedCard` JSON-RPC method —
+  requires authentication, returns additional skills/capabilities
+
+### Codec Mapping Summary
+
+Complete field mapping between Elixir structs and JSON wire format:
+
+| Elixir Struct     | Elixir Field         | JSON Field           | Transform          |
+| ----------------- | -------------------- | -------------------- | ------------------ |
+| `A2A.Task`        | `id`                 | `id`                 | —                  |
+| `A2A.Task`        | `context_id`         | `contextId`          | snake → camel      |
+| `A2A.Task`        | `status`             | `status`             | nested encode      |
+| `A2A.Task`        | `history`            | `history`            | list of Message    |
+| `A2A.Task`        | `artifacts`          | `artifacts`          | list of Artifact   |
+| `A2A.Task`        | `metadata`           | `metadata`           | passthrough        |
+| `A2A.Task`        | _(none)_             | `kind`               | literal `"task"`   |
+| `A2A.Task.Status` | `state`              | `state`              | atom → hyphenated  |
+| `A2A.Task.Status` | `message`            | `message`            | nested encode      |
+| `A2A.Task.Status` | `timestamp`          | `timestamp`          | DateTime → ISO8601 |
+| `A2A.Message`     | `message_id`         | `messageId`          | snake → camel      |
+| `A2A.Message`     | `role`               | `role`               | atom → string      |
+| `A2A.Message`     | `parts`              | `parts`              | list of Part       |
+| `A2A.Message`     | `task_id`            | `taskId`             | snake → camel      |
+| `A2A.Message`     | `context_id`         | `contextId`          | snake → camel      |
+| `A2A.Message`     | `metadata`           | `metadata`           | passthrough        |
+| `A2A.Message`     | `extensions`         | `extensions`         | passthrough        |
+| `A2A.Message`     | _(none)_             | `kind`               | literal `"message"`|
+| `A2A.Artifact`    | `artifact_id`        | `artifactId`         | snake → camel      |
+| `A2A.Artifact`    | `name`               | `name`               | —                  |
+| `A2A.Artifact`    | `description`        | `description`        | —                  |
+| `A2A.Artifact`    | `parts`              | `parts`              | list of Part       |
+| `A2A.Artifact`    | `metadata`           | `metadata`           | passthrough        |
+| `A2A.Part.Text`   | `text`               | `text`               | —                  |
+| `A2A.Part.Text`   | `metadata`           | `metadata`           | passthrough        |
+| `A2A.Part.Text`   | `kind`               | `kind`               | `:text` → `"text"` |
+| `A2A.Part.File`   | `file`               | `file`               | nested encode      |
+| `A2A.Part.File`   | `metadata`           | `metadata`           | passthrough        |
+| `A2A.Part.File`   | `kind`               | `kind`               | `:file` → `"file"` |
+| `A2A.Part.Data`   | `data`               | `data`               | passthrough        |
+| `A2A.Part.Data`   | `metadata`           | `metadata`           | passthrough        |
+| `A2A.Part.Data`   | `kind`               | `kind`               | `:data` → `"data"` |
+| `A2A.FileContent` | `name`               | `name`               | —                  |
+| `A2A.FileContent` | `mime_type`          | `mimeType`           | snake → camel      |
+| `A2A.FileContent` | `bytes`              | `bytes`              | binary → base64    |
+| `A2A.FileContent` | `uri`                | `uri`                | —                  |
 
 ---
 
@@ -290,7 +672,7 @@ end
 ### Agent Runtime
 
 - `use A2A.Agent` generates a supervised GenServer
-- Manages task state machine: `submitted → working → completed | failed | canceled | input_required`
+- Manages task state machine: `submitted → working → completed | failed | canceled | input_required | rejected | auth_required`
 - Context ID tracking and message history accumulation
 - Task ID generation
 
@@ -335,7 +717,7 @@ The same registry data serializes to JSON agent cards for external A2A discovery
 
 Phoenix/Plug adapter that handles all external A2A protocol concerns:
 
-- `GET /.well-known/agent.json` → serialized agent card
+- `GET /.well-known/agent-card.json` → serialized agent card
 - `POST /` → JSON-RPC 2.0 dispatcher
   - `message/send` → calls `handle_message/2`, wraps response in Task + Artifact
   - `message/stream` → calls `handle_message/2`, expects `{:stream, _}`, sends SSE
@@ -419,29 +801,27 @@ Agents are registered in the internal registry on start. Supervised with restart
 
 ---
 
-## Scope
+## Implementation Roadmap
 
-### In Scope
+| Phase | Status  | Description                                                        |
+| ----- | ------- | ------------------------------------------------------------------ |
+| 1     | Done    | Core types + agent runtime (Part, Message, Task, Artifact, Agent behaviour, GenServer, TaskStore) |
+| 2     | Done    | Wire protocol spec — document JSON schemas, JSON-RPC, SSE, error codes |
+| 3     | Next    | JSON codec (`A2A.JSON`) — Elixir structs ↔ camelCase JSON         |
+| 4     | —       | JSON-RPC layer — request/response parsing, method dispatch, error types |
+| 5     | —       | HTTP server (`A2A.Plug`) — agent card endpoint, JSON-RPC POST, SSE |
+| 6     | —       | HTTP client (`A2A.Client`) — discover, send_message, stream via Req |
+| 7     | —       | Registry + Supervisor — agent discovery, supervised startup        |
+| 8     | —       | `{:delegate, agent, msg}` — agent-to-agent forwarding             |
 
-- `A2A.Agent` behaviour and `use` macro
-- Agent runtime (GenServer, task lifecycle state machine)
-- Internal router with location-transparent dispatch
-- Agent registry (internal discovery)
-- A2A server adapter (`A2A.Plug`) — agent cards, JSON-RPC, SSE
-- A2A client (`A2A.Client`) — discover, send, stream
-- Task store abstraction with ETS default
-- Supervision helpers
-- Message and Part helper modules
-- Multi-turn context tracking
-
-### Out of Scope
+### Out of Scope (Initial Release)
 
 - LLM integration (use `instructor`, `langchain`, etc.)
 - Tool/function calling (use MCP via `hermes-mcp`)
 - Agent reasoning, planning, or memory logic
 - UI rendering (A2UI)
-- gRPC transport binding (future consideration)
-- Push notifications / webhooks (future consideration)
+- gRPC transport binding
+- Push notifications / webhooks
 - Auth provider implementations (library provides hooks, not implementations)
 
 ---
