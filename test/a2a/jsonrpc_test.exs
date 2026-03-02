@@ -21,14 +21,15 @@ defmodule A2A.JSONRPCTest do
   # -- message/send ----------------------------------------------------------
 
   describe "message/send" do
-    test "valid request returns success with encoded task" do
+    test "valid request returns success with wrapped task result" do
       {:reply, response} = JSONRPC.handle(rpc("message/send", message_params()), @handler)
 
       assert response["jsonrpc"] == "2.0"
       assert response["id"] == 1
-      assert %{"kind" => "task"} = response["result"]
-      assert response["result"]["status"]["state"] == "completed"
-      assert [%{"kind" => "message"}] = response["result"]["history"]
+      assert %{"task" => task} = response["result"]
+      assert task["kind"] == "task"
+      assert task["status"]["state"] == "TASK_STATE_COMPLETED"
+      assert [%{"kind" => "message"}] = task["history"]
     end
 
     test "bad message returns invalid_params" do
@@ -157,7 +158,7 @@ defmodule A2A.JSONRPCTest do
       {:reply, response} =
         JSONRPC.handle(rpc("SendMessage", message_params()), @handler)
 
-      assert response["result"]["kind"] == "task"
+      assert response["result"]["task"]["kind"] == "task"
     end
 
     test "SendStreamingMessage dispatches as message/stream" do

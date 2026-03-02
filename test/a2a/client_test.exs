@@ -104,7 +104,7 @@ defmodule A2A.ClientTest do
         assert decoded["method"] == "message/send"
         assert decoded["params"]["message"]["role"] == "ROLE_USER"
 
-        json_resp(conn, 200, jsonrpc_success(@task_json))
+        json_resp(conn, 200, jsonrpc_success(%{"task" => @task_json}))
       end
 
       client = Client.new("https://agent.example.com", plug: plug)
@@ -122,7 +122,7 @@ defmodule A2A.ClientTest do
         assert decoded["params"]["id"] == "tsk-existing"
         assert decoded["params"]["contextId"] == "ctx-42"
 
-        json_resp(conn, 200, jsonrpc_success(@task_json))
+        json_resp(conn, 200, jsonrpc_success(%{"task" => @task_json}))
       end
 
       client = Client.new("https://agent.example.com", plug: plug)
@@ -152,7 +152,7 @@ defmodule A2A.ClientTest do
         assert decoded["params"]["message"]["role"] == "ROLE_USER"
         assert decoded["params"]["message"]["messageId"] == "msg-custom"
 
-        json_resp(conn, 200, jsonrpc_success(@task_json))
+        json_resp(conn, 200, jsonrpc_success(%{"task" => @task_json}))
       end
 
       msg = %A2A.Message{
@@ -173,7 +173,7 @@ defmodule A2A.ClientTest do
         assert config["blocking"] == true
         assert config["historyLength"] == 5
 
-        json_resp(conn, 200, jsonrpc_success(@task_json))
+        json_resp(conn, 200, jsonrpc_success(%{"task" => @task_json}))
       end
 
       client = Client.new("https://agent.example.com", plug: plug)
@@ -190,7 +190,7 @@ defmodule A2A.ClientTest do
         decoded = Jason.decode!(body)
         assert decoded["params"]["metadata"] == %{"source" => "test"}
 
-        json_resp(conn, 200, jsonrpc_success(@task_json))
+        json_resp(conn, 200, jsonrpc_success(%{"task" => @task_json}))
       end
 
       client = Client.new("https://agent.example.com", plug: plug)
@@ -346,7 +346,7 @@ defmodule A2A.ClientTest do
   describe "convenience overloads" do
     test "accepts URL string directly" do
       plug = fn conn ->
-        json_resp(conn, 200, jsonrpc_success(@task_json))
+        json_resp(conn, 200, jsonrpc_success(%{"task" => @task_json}))
       end
 
       client = Client.new("https://agent.example.com", plug: plug)
@@ -356,7 +356,7 @@ defmodule A2A.ClientTest do
 
     test "accepts AgentCard directly" do
       plug = fn conn ->
-        json_resp(conn, 200, jsonrpc_success(@task_json))
+        json_resp(conn, 200, jsonrpc_success(%{"task" => @task_json}))
       end
 
       card = %AgentCard{

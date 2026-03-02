@@ -104,7 +104,7 @@ defmodule A2A.PlugTest do
         |> A2A.Plug.call(opts)
 
       assert conn.status == 200
-      assert json_body(conn)["result"]["kind"] == "task"
+      assert json_body(conn)["result"]["task"]["kind"] == "task"
     end
   end
 
@@ -121,8 +121,8 @@ defmodule A2A.PlugTest do
       body = json_body(conn)
       assert body["jsonrpc"] == "2.0"
       assert body["id"] == 1
-      assert body["result"]["kind"] == "task"
-      assert body["result"]["status"]["state"] == "completed"
+      assert body["result"]["task"]["kind"] == "task"
+      assert body["result"]["task"]["status"]["state"] == "TASK_STATE_COMPLETED"
     end
 
     test "works with pre-parsed body (Phoenix/Plug.Parsers)", %{agent: agent} do
@@ -140,8 +140,8 @@ defmodule A2A.PlugTest do
         |> A2A.Plug.call(plug_opts(agent))
 
       body = json_body(conn)
-      assert body["result"]["kind"] == "task"
-      assert body["result"]["status"]["state"] == "completed"
+      assert body["result"]["task"]["kind"] == "task"
+      assert body["result"]["task"]["status"]["state"] == "TASK_STATE_COMPLETED"
     end
 
     test "bad JSON returns parse error", %{agent: agent} do
@@ -172,7 +172,7 @@ defmodule A2A.PlugTest do
         json_rpc_conn("message/send", message_params())
         |> A2A.Plug.call(plug_opts(agent))
 
-      task_id = json_body(send_conn)["result"]["id"]
+      task_id = json_body(send_conn)["result"]["task"]["id"]
 
       conn =
         json_rpc_conn("tasks/get", %{"id" => task_id})
@@ -204,8 +204,9 @@ defmodule A2A.PlugTest do
         json_rpc_conn("message/send", message_params("order pizza"))
         |> A2A.Plug.call(opts)
 
-      task_id = json_body(send_conn)["result"]["id"]
-      assert json_body(send_conn)["result"]["status"]["state"] == "input-required"
+      task_id = json_body(send_conn)["result"]["task"]["id"]
+      assert json_body(send_conn)["result"]["task"]["status"]["state"] ==
+               "TASK_STATE_INPUT_REQUIRED"
 
       # Cancel it
       conn =
@@ -214,7 +215,7 @@ defmodule A2A.PlugTest do
 
       body = json_body(conn)
       assert body["result"]["id"] == task_id
-      assert body["result"]["status"]["state"] == "canceled"
+      assert body["result"]["status"]["state"] == "TASK_STATE_CANCELED"
     end
 
     test "not found returns error", %{agent: agent} do
@@ -308,7 +309,7 @@ defmodule A2A.PlugTest do
         |> A2A.Plug.call(opts)
 
       body = json_body(conn)
-      assert body["result"]["metadata"]["env"] == "prod"
+      assert body["result"]["task"]["metadata"]["env"] == "prod"
     end
 
     test "conn metadata overrides init metadata", %{agent: agent} do
@@ -325,7 +326,7 @@ defmodule A2A.PlugTest do
         |> A2A.Plug.call(opts)
 
       body = json_body(conn)
-      meta = body["result"]["metadata"]
+      meta = body["result"]["task"]["metadata"]
       assert meta["env"] == "staging"
       assert meta["region"] == "us"
       assert meta["tenant_id"] == "t-1"
@@ -349,7 +350,7 @@ defmodule A2A.PlugTest do
         |> A2A.Plug.call(opts)
 
       body = json_body(conn)
-      meta = body["result"]["metadata"]
+      meta = body["result"]["task"]["metadata"]
       # 3-layer merge: init("prod") → conn("t-1") → request("test")
       assert meta["env"] == "test"
       assert meta["tenant_id"] == "t-1"
@@ -391,7 +392,7 @@ defmodule A2A.PlugTest do
         |> A2A.Plug.call(opts)
 
       assert conn.status == 200
-      assert json_body(conn)["result"]["kind"] == "task"
+      assert json_body(conn)["result"]["task"]["kind"] == "task"
     end
   end
 
@@ -415,7 +416,7 @@ defmodule A2A.PlugTest do
         |> A2A.Plug.call(opts)
 
       assert conn.status == 200
-      assert json_body(conn)["result"]["kind"] == "task"
+      assert json_body(conn)["result"]["task"]["kind"] == "task"
     end
   end
 

@@ -95,7 +95,7 @@ defmodule A2A.JSONRPC do
     with {:ok, message} <- decode_message(req.params),
          {:ok, task} <- safe_call(fn -> handler.handle_send(message, req.params) end),
          {:ok, encoded} <- A2A.JSON.encode(strip_stream_metadata(task)) do
-      {:reply, Response.success(req.id, encoded)}
+      {:reply, Response.success(req.id, %{"task" => encoded})}
     else
       {:error, %Error{} = error} -> {:reply, Response.error(req.id, error)}
     end
