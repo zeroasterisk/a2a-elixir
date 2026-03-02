@@ -313,8 +313,7 @@ defmodule A2A.JSON do
          documentation_url: Map.get(map, "documentationUrl"),
          icon_url: Map.get(map, "iconUrl"),
          protocol_version: Map.get(map, "protocolVersion"),
-         supported_interfaces:
-           decode_card_interfaces(Map.get(map, "supportedInterfaces", []))
+         supported_interfaces: decode_card_interfaces(Map.get(map, "supportedInterfaces", []))
        }}
     end
   end

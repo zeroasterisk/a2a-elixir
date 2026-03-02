@@ -857,8 +857,15 @@ defmodule A2A.JSONTest do
       assert map["capabilities"] == %{}
       assert map["defaultInputModes"] == ["text/plain"]
       assert map["defaultOutputModes"] == ["text/plain"]
-      assert [%{"url" => "https://example.com/a2a", "protocolBinding" => "jsonrpc",
-                "protocolVersion" => "2.0"}] = map["supportedInterfaces"]
+
+      assert [
+               %{
+                 "url" => "https://example.com/a2a",
+                 "protocolBinding" => "jsonrpc",
+                 "protocolVersion" => "2.0"
+               }
+             ] = map["supportedInterfaces"]
+
       refute Map.has_key?(map, "provider")
     end
 
@@ -876,10 +883,11 @@ defmodule A2A.JSONTest do
         %{url: "https://b.example.com", protocol_binding: "grpc", protocol_version: "1.0"}
       ]
 
-      map = JSON.encode_agent_card(card,
-        url: "https://example.com/a2a",
-        supported_interfaces: interfaces
-      )
+      map =
+        JSON.encode_agent_card(card,
+          url: "https://example.com/a2a",
+          supported_interfaces: interfaces
+        )
 
       assert [first, second] = map["supportedInterfaces"]
       assert first["url"] == "https://a.example.com"
@@ -1002,8 +1010,13 @@ defmodule A2A.JSONTest do
 
       assert card.default_input_modes == ["text/plain", "application/json"]
 
-      assert [%{url: "https://example.com/a2a", protocol_binding: "jsonrpc",
-                protocol_version: "2.0"}] = card.supported_interfaces
+      assert [
+               %{
+                 url: "https://example.com/a2a",
+                 protocol_binding: "jsonrpc",
+                 protocol_version: "2.0"
+               }
+             ] = card.supported_interfaces
 
       assert card.provider == %{organization: "Acme", url: "https://acme.example.com"}
       assert card.documentation_url == "https://docs.example.com"
@@ -1062,8 +1075,8 @@ defmodule A2A.JSONTest do
       assert [%{id: "s1", name: "Skill One", tags: ["tag1"]}] = decoded.skills
       assert decoded.capabilities == %{streaming: true}
 
-      assert [%{url: "https://example.com", protocol_binding: "jsonrpc",
-                protocol_version: "2.0"}] = decoded.supported_interfaces
+      assert [%{url: "https://example.com", protocol_binding: "jsonrpc", protocol_version: "2.0"}] =
+               decoded.supported_interfaces
 
       assert decoded.provider == %{organization: "Org", url: "https://org.example.com"}
       assert decoded.documentation_url == "https://docs.example.com"
