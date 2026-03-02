@@ -519,49 +519,39 @@ defmodule A2A.JSON do
   end
 
   defp encode_capabilities(caps) when is_map(caps) do
-    map = %{}
-
-    map =
-      case Map.get(caps, :streaming, Map.get(caps, "streaming")) do
-        nil -> map
-        val -> Map.put(map, "streaming", val)
-      end
-
-    map =
-      case Map.get(caps, :push_notifications, Map.get(caps, "pushNotifications")) do
-        nil -> map
-        val -> Map.put(map, "pushNotifications", val)
-      end
-
-    map =
-      case Map.get(
-             caps,
-             :state_transition_history,
-             Map.get(caps, "stateTransitionHistory")
-           ) do
-        nil -> map
-        val -> Map.put(map, "stateTransitionHistory", val)
-      end
-
-    map
+    encode_known_keys(caps, [
+      {"streaming", :streaming},
+      {"pushNotifications", :push_notifications},
+      {"stateTransitionHistory", :state_transition_history}
+    ])
   end
 
   defp encode_interfaces(interfaces) when is_list(interfaces) do
-    Enum.map(interfaces, fn iface ->
-      url = Map.get(iface, :url, Map.get(iface, "url"))
-      binding = Map.get(iface, :protocol_binding, Map.get(iface, "protocolBinding"))
-      version = Map.get(iface, :protocol_version, Map.get(iface, "protocolVersion"))
+    mappings = [
+      {"url", :url},
+      {"protocolBinding", :protocol_binding},
+      {"protocolVersion", :protocol_version}
+    ]
 
-      %{"url" => url, "protocolBinding" => binding, "protocolVersion" => version}
-    end)
+    Enum.map(interfaces, &encode_known_keys(&1, mappings))
   end
 
   defp encode_provider(nil), do: nil
 
   defp encode_provider(provider) when is_map(provider) do
-    org = Map.get(provider, :organization, Map.get(provider, "organization"))
-    url = Map.get(provider, :url, Map.get(provider, "url"))
-    %{"organization" => org, "url" => url}
+    encode_known_keys(provider, [
+      {"organization", :organization},
+      {"url", :url}
+    ])
+  end
+
+  defp encode_known_keys(source, mappings) do
+    Enum.reduce(mappings, %{}, fn {json_key, atom_key}, acc ->
+      case Map.get(source, atom_key, Map.get(source, json_key)) do
+        nil -> acc
+        val -> Map.put(acc, json_key, val)
+      end
+    end)
   end
 
   defp put_unless_nil(map, _key, nil), do: map
@@ -702,34 +692,21 @@ defmodule A2A.JSON do
   defp decode_card_capabilities(nil), do: %{}
 
   defp decode_card_capabilities(map) when is_map(map) do
-    result = %{}
-
-    result =
-      case Map.get(map, "streaming") do
-        nil -> result
-        val -> Map.put(result, :streaming, val)
-      end
-
-    result =
-      case Map.get(map, "pushNotifications") do
-        nil -> result
-        val -> Map.put(result, :push_notifications, val)
-      end
-
-    case Map.get(map, "stateTransitionHistory") do
-      nil -> result
-      val -> Map.put(result, :state_transition_history, val)
-    end
+    decode_known_keys(map, [
+      {"streaming", :streaming},
+      {"pushNotifications", :push_notifications},
+      {"stateTransitionHistory", :state_transition_history}
+    ])
   end
 
   defp decode_card_interfaces(interfaces) when is_list(interfaces) do
-    Enum.map(interfaces, fn iface ->
-      %{
-        url: Map.get(iface, "url"),
-        protocol_binding: Map.get(iface, "protocolBinding"),
-        protocol_version: Map.get(iface, "protocolVersion")
-      }
-    end)
+    mappings = [
+      {"url", :url},
+      {"protocolBinding", :protocol_binding},
+      {"protocolVersion", :protocol_version}
+    ]
+
+    Enum.map(interfaces, &decode_known_keys(&1, mappings))
   end
 
   defp decode_card_interfaces(_), do: []
@@ -737,9 +714,18 @@ defmodule A2A.JSON do
   defp decode_card_provider(nil), do: nil
 
   defp decode_card_provider(map) when is_map(map) do
-    %{
-      organization: Map.get(map, "organization"),
-      url: Map.get(map, "url")
-    }
+    decode_known_keys(map, [
+      {"organization", :organization},
+      {"url", :url}
+    ])
+  end
+
+  defp decode_known_keys(source, mappings) do
+    Enum.reduce(mappings, %{}, fn {json_key, atom_key}, acc ->
+      case Map.get(source, json_key) do
+        nil -> acc
+        val -> Map.put(acc, atom_key, val)
+      end
+    end)
   end
 end
