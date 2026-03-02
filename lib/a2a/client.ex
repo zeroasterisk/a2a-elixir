@@ -305,24 +305,20 @@ if Code.ensure_loaded?(Req) do
     defp encode_configuration(nil), do: nil
 
     defp encode_configuration(config) when is_map(config) do
-      result = %{}
-
-      result =
-        case Map.get(config, :accepted_output_modes, Map.get(config, "acceptedOutputModes")) do
-          nil -> result
-          val -> Map.put(result, "acceptedOutputModes", val)
+      Enum.reduce(
+        [
+          {"acceptedOutputModes", :accepted_output_modes},
+          {"blocking", :blocking},
+          {"historyLength", :history_length}
+        ],
+        %{},
+        fn {json_key, atom_key}, acc ->
+          case Map.get(config, atom_key, Map.get(config, json_key)) do
+            nil -> acc
+            val -> Map.put(acc, json_key, val)
+          end
         end
-
-      result =
-        case Map.get(config, :blocking, Map.get(config, "blocking")) do
-          nil -> result
-          val -> Map.put(result, "blocking", val)
-        end
-
-      case Map.get(config, :history_length, Map.get(config, "historyLength")) do
-        nil -> result
-        val -> Map.put(result, "historyLength", val)
-      end
+      )
     end
 
     defp put_opt(map, _key, nil), do: map
