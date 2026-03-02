@@ -39,6 +39,21 @@ defmodule A2A.JSONRPC do
 
   alias A2A.JSONRPC.{Error, Request, Response}
 
+  # v0.3.0 PascalCase method names → internal slash-style names
+  @method_aliases %{
+    "SendMessage" => "message/send",
+    "SendStreamingMessage" => "message/stream",
+    "GetTask" => "tasks/get",
+    "CancelTask" => "tasks/cancel",
+    "SubscribeToTask" => "tasks/resubscribe",
+    "ListTasks" => "tasks/list",
+    "GetExtendedAgentCard" => "agent/getAuthenticatedExtendedCard",
+    "CreateTaskPushNotificationConfig" => "tasks/pushNotificationConfig/set",
+    "GetTaskPushNotificationConfig" => "tasks/pushNotificationConfig/get",
+    "ListTaskPushNotificationConfigs" => "tasks/pushNotificationConfig/list",
+    "DeleteTaskPushNotificationConfig" => "tasks/pushNotificationConfig/delete"
+  }
+
   @type result ::
           {:reply, map()}
           | {:stream, String.t(), map(), Request.id()}
@@ -64,6 +79,7 @@ defmodule A2A.JSONRPC do
   @spec handle(map(), module()) :: result()
   def handle(raw, handler) do
     with {:ok, request} <- Request.parse(raw),
+         request = normalize_method(request),
          :ok <- Request.validate_params(request) do
       dispatch(request, handler)
     else
@@ -78,7 +94,7 @@ defmodule A2A.JSONRPC do
   defp dispatch(%Request{method: "message/send"} = req, handler) do
     with {:ok, message} <- decode_message(req.params),
          {:ok, task} <- safe_call(fn -> handler.handle_send(message, req.params) end),
-         {:ok, encoded} <- A2A.JSON.encode(task) do
+         {:ok, encoded} <- A2A.JSON.encode(strip_stream_metadata(task)) do
       {:reply, Response.success(req.id, encoded)}
     else
       {:error, %Error{} = error} -> {:reply, Response.error(req.id, error)}
@@ -142,7 +158,7 @@ defmodule A2A.JSONRPC do
   defp decode_message(params) do
     case A2A.JSON.decode(params["message"], :message) do
       {:ok, _message} = ok -> ok
-      {:error, reason} -> {:error, Error.invalid_params(reason)}
+      {:error, reason} -> {:error, Error.invalid_params(inspect(reason))}
     end
   end
 
@@ -155,6 +171,21 @@ defmodule A2A.JSONRPC do
     e -> {:error, Error.internal_error(Exception.message(e))}
   end
 
+  defp normalize_method(%Request{method: method} = request) do
+    case Map.get(@method_aliases, method) do
+      nil -> request
+      canonical -> %{request | method: canonical}
+    end
+  end
+
   defp extract_id(%{"id" => id}) when is_binary(id) or is_integer(id), do: id
   defp extract_id(_), do: nil
+
+  # The :stream key in task metadata holds a raw enumerable/function ref
+  # used by the SSE path. Strip it before JSON encoding to avoid crashes.
+  defp strip_stream_metadata(%{metadata: metadata} = task) do
+    %{task | metadata: Map.delete(metadata, :stream)}
+  end
+
+  defp strip_stream_metadata(task), do: task
 end

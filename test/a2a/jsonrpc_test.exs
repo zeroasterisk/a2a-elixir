@@ -150,6 +150,57 @@ defmodule A2A.JSONRPCTest do
     end
   end
 
+  # -- PascalCase method aliases ---------------------------------------------
+
+  describe "PascalCase method aliases" do
+    test "SendMessage dispatches as message/send" do
+      {:reply, response} =
+        JSONRPC.handle(rpc("SendMessage", message_params()), @handler)
+
+      assert response["result"]["kind"] == "task"
+    end
+
+    test "SendStreamingMessage dispatches as message/stream" do
+      result = JSONRPC.handle(rpc("SendStreamingMessage", message_params()), @handler)
+
+      assert {:stream, "message/stream", _params, 1} = result
+    end
+
+    test "GetTask dispatches as tasks/get" do
+      {:reply, response} =
+        JSONRPC.handle(rpc("GetTask", %{"id" => "existing"}), @handler)
+
+      assert response["result"]["id"] == "existing"
+    end
+
+    test "CancelTask dispatches as tasks/cancel" do
+      {:reply, response} =
+        JSONRPC.handle(rpc("CancelTask", %{"id" => "cancelable"}), @handler)
+
+      assert response["result"]["status"]["state"] == "canceled"
+    end
+
+    test "GetExtendedAgentCard returns unsupported_operation" do
+      {:reply, response} =
+        JSONRPC.handle(rpc("GetExtendedAgentCard"), @handler)
+
+      assert response["error"]["code"] == -32_004
+    end
+
+    test "CreateTaskPushNotificationConfig returns push_notification_not_supported" do
+      {:reply, response} =
+        JSONRPC.handle(rpc("CreateTaskPushNotificationConfig"), @handler)
+
+      assert response["error"]["code"] == -32_003
+    end
+
+    test "ListTasks returns method_not_found" do
+      {:reply, response} = JSONRPC.handle(rpc("ListTasks"), @handler)
+
+      assert response["error"]["code"] == -32_601
+    end
+  end
+
   # -- unknown method --------------------------------------------------------
 
   describe "unknown method" do
