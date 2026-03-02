@@ -197,6 +197,9 @@ defmodule A2A.JSON do
   - `:documentation_url` — URL string
   - `:icon_url` — URL string
   - `:protocol_version` — protocol version string
+  - `:supported_interfaces` — list of `%{url: ..., protocol_binding: ...,
+    protocol_version: ...}` maps. Defaults to a single JSON-RPC interface
+    derived from `:url`.
   """
   @spec encode_agent_card(A2A.Agent.card(), keyword()) :: map()
   def encode_agent_card(card, opts \\ []) do
@@ -204,6 +207,10 @@ defmodule A2A.JSON do
     capabilities = Keyword.get(opts, :capabilities, %{})
     input_modes = Keyword.get(opts, :default_input_modes, ["text/plain"])
     output_modes = Keyword.get(opts, :default_output_modes, ["text/plain"])
+
+    interfaces =
+      Keyword.get(opts, :supported_interfaces) ||
+        [%{url: url, protocol_binding: "jsonrpc", protocol_version: "2.0"}]
 
     skills =
       Enum.map(card.skills, fn skill ->
@@ -226,7 +233,8 @@ defmodule A2A.JSON do
         "skills" => skills,
         "capabilities" => caps,
         "defaultInputModes" => input_modes,
-        "defaultOutputModes" => output_modes
+        "defaultOutputModes" => output_modes,
+        "supportedInterfaces" => encode_interfaces(interfaces)
       }
       |> put_unless_nil("provider", encode_provider(Keyword.get(opts, :provider)))
       |> put_unless_nil("documentationUrl", Keyword.get(opts, :documentation_url))
@@ -277,7 +285,9 @@ defmodule A2A.JSON do
          provider: decode_card_provider(Map.get(map, "provider")),
          documentation_url: Map.get(map, "documentationUrl"),
          icon_url: Map.get(map, "iconUrl"),
-         protocol_version: Map.get(map, "protocolVersion")
+         protocol_version: Map.get(map, "protocolVersion"),
+         supported_interfaces:
+           decode_card_interfaces(Map.get(map, "supportedInterfaces", []))
        }}
     end
   end
@@ -498,6 +508,16 @@ defmodule A2A.JSON do
     map
   end
 
+  defp encode_interfaces(interfaces) when is_list(interfaces) do
+    Enum.map(interfaces, fn iface ->
+      url = Map.get(iface, :url, Map.get(iface, "url"))
+      binding = Map.get(iface, :protocol_binding, Map.get(iface, "protocolBinding"))
+      version = Map.get(iface, :protocol_version, Map.get(iface, "protocolVersion"))
+
+      %{"url" => url, "protocolBinding" => binding, "protocolVersion" => version}
+    end)
+  end
+
   defp encode_provider(nil), do: nil
 
   defp encode_provider(provider) when is_map(provider) do
@@ -663,6 +683,18 @@ defmodule A2A.JSON do
       val -> Map.put(result, :state_transition_history, val)
     end
   end
+
+  defp decode_card_interfaces(interfaces) when is_list(interfaces) do
+    Enum.map(interfaces, fn iface ->
+      %{
+        url: Map.get(iface, "url"),
+        protocol_binding: Map.get(iface, "protocolBinding"),
+        protocol_version: Map.get(iface, "protocolVersion")
+      }
+    end)
+  end
+
+  defp decode_card_interfaces(_), do: []
 
   defp decode_card_provider(nil), do: nil
 

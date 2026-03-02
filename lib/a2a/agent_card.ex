@@ -31,6 +31,12 @@ defmodule A2A.AgentCard do
           url: String.t()
         }
 
+  @type supported_interface :: %{
+          url: String.t(),
+          protocol_binding: String.t(),
+          protocol_version: String.t()
+        }
+
   @type t :: %__MODULE__{
           name: String.t(),
           description: String.t(),
@@ -43,7 +49,8 @@ defmodule A2A.AgentCard do
           provider: provider() | nil,
           documentation_url: String.t() | nil,
           icon_url: String.t() | nil,
-          protocol_version: String.t() | nil
+          protocol_version: String.t() | nil,
+          supported_interfaces: [supported_interface()]
         }
 
   @enforce_keys [:name, :description, :url, :version, :skills]
@@ -59,6 +66,7 @@ defmodule A2A.AgentCard do
     skills: [],
     capabilities: %{},
     default_input_modes: ["text/plain"],
-    default_output_modes: ["text/plain"]
+    default_output_modes: ["text/plain"],
+    supported_interfaces: []
   ]
 end

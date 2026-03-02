@@ -812,7 +812,35 @@ defmodule A2A.JSONTest do
       assert map["capabilities"] == %{}
       assert map["defaultInputModes"] == ["text/plain"]
       assert map["defaultOutputModes"] == ["text/plain"]
+      assert [%{"url" => "https://example.com/a2a", "protocolBinding" => "jsonrpc",
+                "protocolVersion" => "2.0"}] = map["supportedInterfaces"]
       refute Map.has_key?(map, "provider")
+    end
+
+    test "accepts custom supported_interfaces" do
+      card = %{
+        name: "test-agent",
+        description: "A test agent",
+        version: "1.0.0",
+        skills: [],
+        opts: []
+      }
+
+      interfaces = [
+        %{url: "https://a.example.com", protocol_binding: "jsonrpc", protocol_version: "2.0"},
+        %{url: "https://b.example.com", protocol_binding: "grpc", protocol_version: "1.0"}
+      ]
+
+      map = JSON.encode_agent_card(card,
+        url: "https://example.com/a2a",
+        supported_interfaces: interfaces
+      )
+
+      assert [first, second] = map["supportedInterfaces"]
+      assert first["url"] == "https://a.example.com"
+      assert first["protocolBinding"] == "jsonrpc"
+      assert second["url"] == "https://b.example.com"
+      assert second["protocolBinding"] == "grpc"
     end
 
     test "encodes full card with all options" do
@@ -842,6 +870,7 @@ defmodule A2A.JSONTest do
       assert map["documentationUrl"] == "https://docs.example.com"
       assert map["iconUrl"] == "https://example.com/icon.png"
       assert map["protocolVersion"] == "0.3"
+      assert [%{"url" => "https://example.com/a2a"}] = map["supportedInterfaces"]
     end
 
     test "raises when url is missing" do
@@ -884,6 +913,7 @@ defmodule A2A.JSONTest do
       assert card.capabilities == %{}
       assert card.default_input_modes == ["text/plain"]
       assert card.default_output_modes == ["text/plain"]
+      assert card.supported_interfaces == []
       assert card.provider == nil
     end
 
@@ -901,6 +931,13 @@ defmodule A2A.JSONTest do
         },
         "defaultInputModes" => ["text/plain", "application/json"],
         "defaultOutputModes" => ["text/plain"],
+        "supportedInterfaces" => [
+          %{
+            "url" => "https://example.com/a2a",
+            "protocolBinding" => "jsonrpc",
+            "protocolVersion" => "2.0"
+          }
+        ],
         "provider" => %{
           "organization" => "Acme",
           "url" => "https://acme.example.com"
@@ -919,6 +956,10 @@ defmodule A2A.JSONTest do
              }
 
       assert card.default_input_modes == ["text/plain", "application/json"]
+
+      assert [%{url: "https://example.com/a2a", protocol_binding: "jsonrpc",
+                protocol_version: "2.0"}] = card.supported_interfaces
+
       assert card.provider == %{organization: "Acme", url: "https://acme.example.com"}
       assert card.documentation_url == "https://docs.example.com"
       assert card.icon_url == "https://example.com/icon.png"
@@ -975,6 +1016,10 @@ defmodule A2A.JSONTest do
       assert decoded.version == "1.0.0"
       assert [%{id: "s1", name: "Skill One", tags: ["tag1"]}] = decoded.skills
       assert decoded.capabilities == %{streaming: true}
+
+      assert [%{url: "https://example.com", protocol_binding: "jsonrpc",
+                protocol_version: "2.0"}] = decoded.supported_interfaces
+
       assert decoded.provider == %{organization: "Org", url: "https://org.example.com"}
       assert decoded.documentation_url == "https://docs.example.com"
       assert decoded.icon_url == "https://icon.example.com"

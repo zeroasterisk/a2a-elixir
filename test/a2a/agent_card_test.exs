@@ -32,6 +32,7 @@ defmodule A2A.AgentCardTest do
       assert card.capabilities == %{}
       assert card.default_input_modes == ["text/plain"]
       assert card.default_output_modes == ["text/plain"]
+      assert card.supported_interfaces == []
       assert card.provider == nil
       assert card.documentation_url == nil
       assert card.icon_url == nil
