@@ -96,3 +96,83 @@ jobs:
       - run: mix compile --warnings-as-errors
 
       - run: mix test --warnings-as-errors
+
+  tck:
+    name: TCK Compliance
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18"
+          otp-version: "27"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: deps-${{ runner.os }}-1.18-27-${{ hashFiles('**/mix.lock') }}
+          restore-keys: deps-${{ runner.os }}-1.18-27-
+
+      - name: Restore build cache
+        uses: actions/cache@v4
+        with:
+          path: _build
+          key: build-${{ runner.os }}-1.18-27-${{ hashFiles('**/mix.lock') }}
+          restore-keys: build-${{ runner.os }}-1.18-27-
+
+      - name: Cache TCK repo
+        uses: actions/cache@v4
+        with:
+          path: .tck
+          key: tck-${{ hashFiles('bin/tck') }}
+
+      - run: mix deps.get
+
+      - run: mix compile
+
+      - name: Start TCK server
+        run: mix run test/tck/server.exs &
+
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9999/.well-known/agent-card.json > /dev/null 2>&1; then
+              echo "Server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start"
+          exit 1
+
+      - name: Clone TCK
+        run: |
+          if [ ! -d .tck ]; then
+            git clone https://github.com/a2aproject/a2a-tck.git .tck
+          fi
+
+      - name: Install TCK dependencies
+        run: |
+          cd .tck
+          uv venv
+          uv pip install -e .
+
+      - name: Run TCK (mandatory)
+        run: |
+          cd .tck
+          uv run ./run_tck.py \
+            --sut-url http://localhost:9999 \
+            --category mandatory \
+            --compliance-report ../tck-report.json
+
+      - name: Upload TCK report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tck-report
+          path: tck-report.json
+          if-no-files-found: ignore

@@ -79,6 +79,34 @@ mix run examples/demo.exs
 
 Requires Elixir ~> 1.17.
 
+### TCK (Protocol Compliance)
+
+The [A2A TCK](https://github.com/a2aproject/a2a-tck) is the official compliance test suite for the A2A protocol. It runs against a live server and validates protocol conformance.
+
+**Prerequisites:** [uv](https://docs.astral.sh/uv/) (Python package manager)
+
+```bash
+# Run mandatory compliance tests (clones TCK on first run)
+bin/tck mandatory
+
+# Run all categories
+bin/tck all
+
+# Available categories: mandatory, capabilities, quality, features, all
+```
+
+To run the server manually (e.g. for debugging):
+
+```bash
+# Default port 9999
+mix run test/tck/server.exs
+
+# Custom port
+A2A_TCK_PORT=8080 mix run test/tck/server.exs
+```
+
+The TCK runs on every PR in CI. Reports are uploaded as build artifacts.
+
 ## Links
 
 - [A2A Protocol Specification](https://google.github.io/A2A/)

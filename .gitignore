@@ -13,3 +13,7 @@
 .elixir_ls/
 .lexical/
 .idea/
+
+# TCK
+/.tck/
+/tck-report.json
