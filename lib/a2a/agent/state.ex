@@ -164,6 +164,13 @@ defmodule A2A.Agent.State do
     end
   end
 
+  defp decode_state(str) do
+    case A2A.JSON.decode_state(str) do
+      {:ok, atom} -> atom
+      {:error, _} -> :unknown
+    end
+  end
+
   defp maybe_filter(tasks, _fun, nil), do: tasks
   defp maybe_filter(tasks, fun, _val), do: Enum.filter(tasks, fun)
 
@@ -187,17 +194,6 @@ defmodule A2A.Agent.State do
   defp strip_artifacts(task, true), do: task
   defp strip_artifacts(task, _), do: %{task | artifacts: []}
 
-  defp decode_state_atom("TASK_STATE_SUBMITTED"), do: :submitted
-  defp decode_state_atom("TASK_STATE_WORKING"), do: :working
-  defp decode_state_atom("TASK_STATE_INPUT_REQUIRED"), do: :input_required
-  defp decode_state_atom("TASK_STATE_COMPLETED"), do: :completed
-  defp decode_state_atom("TASK_STATE_CANCELED"), do: :canceled
-  defp decode_state_atom("TASK_STATE_FAILED"), do: :failed
-  defp decode_state_atom("TASK_STATE_REJECTED"), do: :rejected
-  defp decode_state_atom("TASK_STATE_AUTH_REQUIRED"), do: :auth_required
-  defp decode_state_atom("TASK_STATE_UNKNOWN"), do: :unknown
-  defp decode_state_atom(_s), do: :unknown
-
   defp parse_datetime(str) do
     case DateTime.from_iso8601(str) do
       {:ok, dt, _} -> dt
@@ -209,7 +205,7 @@ defmodule A2A.Agent.State do
     status_atom =
       case params["status"] do
         nil -> nil
-        s -> decode_state_atom(s)
+        s -> decode_state(s)
       end
 
     timestamp_after =

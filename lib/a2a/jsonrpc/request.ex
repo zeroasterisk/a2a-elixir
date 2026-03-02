@@ -56,12 +56,6 @@ defmodule A2A.JSONRPC.Request do
     end
   end
 
-  @valid_statuses ~w(
-    TASK_STATE_SUBMITTED TASK_STATE_WORKING TASK_STATE_INPUT_REQUIRED
-    TASK_STATE_COMPLETED TASK_STATE_CANCELED TASK_STATE_FAILED
-    TASK_STATE_REJECTED TASK_STATE_AUTH_REQUIRED TASK_STATE_UNKNOWN
-  )
-
   def validate_params(%__MODULE__{method: "tasks/list", params: params}) do
     cond do
       bad_page_size?(params) ->
@@ -118,7 +112,7 @@ defmodule A2A.JSONRPC.Request do
   defp bad_page_size?(_), do: false
 
   defp bad_status?(%{"status" => status}) when is_binary(status) do
-    status not in @valid_statuses
+    status not in A2A.JSON.valid_state_strings()
   end
 
   defp bad_status?(%{"status" => _}), do: true

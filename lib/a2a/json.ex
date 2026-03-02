@@ -32,28 +32,21 @@ defmodule A2A.JSON do
     unknown: "TASK_STATE_UNKNOWN"
   }
 
-  # Accept both old and v0.3 wire formats
-  @string_to_state %{
-    "TASK_STATE_SUBMITTED" => :submitted,
-    "TASK_STATE_WORKING" => :working,
-    "TASK_STATE_INPUT_REQUIRED" => :input_required,
-    "TASK_STATE_COMPLETED" => :completed,
-    "TASK_STATE_CANCELED" => :canceled,
-    "TASK_STATE_FAILED" => :failed,
-    "TASK_STATE_REJECTED" => :rejected,
-    "TASK_STATE_AUTH_REQUIRED" => :auth_required,
-    "TASK_STATE_UNKNOWN" => :unknown,
-    # Legacy lowercase format
-    "submitted" => :submitted,
-    "working" => :working,
-    "input-required" => :input_required,
-    "completed" => :completed,
-    "canceled" => :canceled,
-    "failed" => :failed,
-    "rejected" => :rejected,
-    "auth-required" => :auth_required,
-    "unknown" => :unknown
-  }
+  # Auto-derive canonical inverse, then merge legacy aliases
+  @string_to_state @state_to_string
+                   |> Map.new(fn {k, v} -> {v, k} end)
+                   |> Map.merge(%{
+                     # Legacy lowercase format
+                     "submitted" => :submitted,
+                     "working" => :working,
+                     "input-required" => :input_required,
+                     "completed" => :completed,
+                     "canceled" => :canceled,
+                     "failed" => :failed,
+                     "rejected" => :rejected,
+                     "auth-required" => :auth_required,
+                     "unknown" => :unknown
+                   })
 
   # v0.3 wire format: ROLE_* prefixed enum values
   @role_to_string %{user: "ROLE_USER", agent: "ROLE_AGENT"}
@@ -64,6 +57,24 @@ defmodule A2A.JSON do
     "user" => :user,
     "agent" => :agent
   }
+  @doc """
+  Returns the list of valid v0.3 wire-format state strings.
+  """
+  @spec valid_state_strings() :: [String.t()]
+  def valid_state_strings, do: Map.values(@state_to_string)
+
+  @doc """
+  Decodes a wire-format state string to an atom.
+
+  Accepts both v0.3 (`"TASK_STATE_WORKING"`) and legacy (`"working"`)
+  formats.
+  """
+  @spec decode_state(String.t()) :: {:ok, atom()} | {:error, {:invalid_state, String.t()}}
+  def decode_state(str) when is_map_key(@string_to_state, str) do
+    {:ok, @string_to_state[str]}
+  end
+
+  def decode_state(str), do: {:error, {:invalid_state, str}}
 
   # -------------------------------------------------------------------
   # Encoding
@@ -577,12 +588,6 @@ defmodule A2A.JSON do
       :error -> {:error, {:missing_field, field}}
     end
   end
-
-  defp decode_state(str) when is_map_key(@string_to_state, str) do
-    {:ok, @string_to_state[str]}
-  end
-
-  defp decode_state(str), do: {:error, {:invalid_state, str}}
 
   defp decode_role(str) when is_map_key(@string_to_role, str) do
     {:ok, @string_to_role[str]}
