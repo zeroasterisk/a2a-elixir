@@ -84,84 +84,9 @@ defmodule A2A.Agent.State do
   end
 
   defp list_from_memory(state, params) do
-    page_size = params["pageSize"] || 50
-    page_token = params["pageToken"]
-    context_id = params["contextId"]
-    status_str = params["status"]
-    history_length = params["historyLength"] || 0
-    include_artifacts = params["includeArtifacts"] || false
-    timestamp_after_str = params["statusTimestampAfter"]
-
-    status_atom =
-      case status_str do
-        nil -> nil
-        s -> decode_state_atom(s)
-      end
-
-    timestamp_after =
-      case timestamp_after_str do
-        nil -> nil
-        s -> parse_datetime(s)
-      end
-
-    all_tasks =
-      state.tasks
-      |> Map.values()
-      |> Enum.sort_by(& &1.status.timestamp, {:desc, DateTime})
-
-    filtered =
-      all_tasks
-      |> maybe_filter(&(&1.context_id == context_id), context_id)
-      |> maybe_filter(&(&1.status.state == status_atom), status_atom)
-      |> maybe_filter_ts(timestamp_after)
-
-    total_size = length(filtered)
-
-    {valid_token?, filtered} =
-      case page_token do
-        nil ->
-          {true, filtered}
-
-        "" ->
-          {true, filtered}
-
-        token ->
-          after_token = Enum.drop_while(filtered, fn t -> t.id != token end)
-
-          if after_token == [] and not Enum.any?(filtered, fn t -> t.id == token end) do
-            {false, []}
-          else
-            {true, Enum.drop(after_token, 1)}
-          end
-      end
-
-    if not valid_token? do
-      {:error, :invalid_page_token}
-    else
-      page = Enum.take(filtered, page_size)
-
-      next_token =
-        if length(filtered) > page_size do
-          page |> List.last() |> Map.get(:id)
-        else
-          ""
-        end
-
-      tasks =
-        Enum.map(page, fn task ->
-          task
-          |> limit_history(history_length)
-          |> strip_artifacts(include_artifacts)
-        end)
-
-      {:ok,
-       %{
-         tasks: tasks,
-         total_size: total_size,
-         page_size: length(tasks),
-         next_page_token: next_token
-       }}
-    end
+    state.tasks
+    |> Map.values()
+    |> A2A.Task.Filter.apply(params_to_list_opts(params))
   end
 
   defp decode_state(str) do
@@ -170,29 +95,6 @@ defmodule A2A.Agent.State do
       {:error, _} -> :unknown
     end
   end
-
-  defp maybe_filter(tasks, _fun, nil), do: tasks
-  defp maybe_filter(tasks, fun, _val), do: Enum.filter(tasks, fun)
-
-  defp maybe_filter_ts(tasks, nil), do: tasks
-
-  defp maybe_filter_ts(tasks, after_dt) do
-    Enum.filter(tasks, fn task ->
-      task.status.timestamp != nil and
-        DateTime.compare(task.status.timestamp, after_dt) == :gt
-    end)
-  end
-
-  defp limit_history(task, 0), do: %{task | history: []}
-
-  defp limit_history(task, n) when is_integer(n) and n > 0 do
-    %{task | history: Enum.take(task.history, -n)}
-  end
-
-  defp limit_history(task, _), do: task
-
-  defp strip_artifacts(task, true), do: task
-  defp strip_artifacts(task, _), do: %{task | artifacts: []}
 
   defp parse_datetime(str) do
     case DateTime.from_iso8601(str) do
