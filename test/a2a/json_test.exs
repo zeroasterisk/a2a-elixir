@@ -97,7 +97,7 @@ defmodule A2A.JSONTest do
 
       assert map["kind"] == "message"
       assert map["messageId"] == "msg-1"
-      assert map["role"] == "user"
+      assert map["role"] == "ROLE_USER"
       assert map["taskId"] == "tsk-1"
       assert map["contextId"] == "ctx-1"
       assert [%{"kind" => "text", "text" => "hello"}] = map["parts"]
@@ -146,22 +146,22 @@ defmodule A2A.JSONTest do
   end
 
   describe "encode Task.Status" do
-    test "encodes state atoms to hyphenated strings" do
+    test "encodes state atoms to v0.3 TASK_STATE_* format" do
       status = Task.Status.new(:input_required)
       {:ok, map} = JSON.encode(status)
-      assert map["state"] == "input-required"
+      assert map["state"] == "TASK_STATE_INPUT_REQUIRED"
     end
 
     test "encodes auth_required" do
       status = Task.Status.new(:auth_required)
       {:ok, map} = JSON.encode(status)
-      assert map["state"] == "auth-required"
+      assert map["state"] == "TASK_STATE_AUTH_REQUIRED"
     end
 
-    test "encodes simple state as string" do
+    test "encodes simple state as v0.3 format" do
       status = Task.Status.new(:working)
       {:ok, map} = JSON.encode(status)
-      assert map["state"] == "working"
+      assert map["state"] == "TASK_STATE_WORKING"
     end
 
     test "encodes timestamp as ISO8601" do
@@ -175,7 +175,7 @@ defmodule A2A.JSONTest do
       status = Task.Status.new(:working, msg)
       {:ok, map} = JSON.encode(status)
       assert map["message"]["kind"] == "message"
-      assert map["message"]["role"] == "agent"
+      assert map["message"]["role"] == "ROLE_AGENT"
     end
 
     test "omits nil message" do
@@ -193,7 +193,7 @@ defmodule A2A.JSONTest do
       assert map["kind"] == "task"
       assert is_binary(map["id"])
       assert map["contextId"] == "ctx-1"
-      assert map["status"]["state"] == "submitted"
+      assert map["status"]["state"] == "TASK_STATE_SUBMITTED"
     end
 
     test "omits empty history and artifacts" do
@@ -223,7 +223,7 @@ defmodule A2A.JSONTest do
       assert map["taskId"] == "tsk-1"
       assert map["contextId"] == "ctx-1"
       assert map["final"] == false
-      assert map["status"]["state"] == "working"
+      assert map["status"]["state"] == "TASK_STATE_WORKING"
     end
   end
 
@@ -381,6 +381,26 @@ defmodule A2A.JSONTest do
       assert {:error, {:missing_field, "parts"}} =
                JSON.decode(%{"role" => "user"}, :message)
     end
+
+    test "decodes v0.3 ROLE_USER format" do
+      map = %{
+        "role" => "ROLE_USER",
+        "parts" => [%{"text" => "hi"}]
+      }
+
+      {:ok, msg} = JSON.decode(map, :message)
+      assert msg.role == :user
+    end
+
+    test "decodes v0.3 ROLE_AGENT format" do
+      map = %{
+        "role" => "ROLE_AGENT",
+        "parts" => [%{"text" => "hi"}]
+      }
+
+      {:ok, msg} = JSON.decode(map, :message)
+      assert msg.role == :agent
+    end
   end
 
   describe "decode :artifact" do
@@ -409,22 +429,32 @@ defmodule A2A.JSONTest do
   end
 
   describe "decode :status" do
-    test "decodes hyphenated state" do
+    test "decodes v0.3 TASK_STATE_* format" do
       {:ok, status} =
         JSON.decode(
-          %{"state" => "input-required", "timestamp" => "2024-01-01T00:00:00Z"},
+          %{"state" => "TASK_STATE_INPUT_REQUIRED", "timestamp" => "2024-01-01T00:00:00Z"},
           :status
         )
 
       assert status.state == :input_required
     end
 
-    test "decodes auth-required" do
-      {:ok, status} = JSON.decode(%{"state" => "auth-required"}, :status)
+    test "decodes v0.3 TASK_STATE_AUTH_REQUIRED" do
+      {:ok, status} = JSON.decode(%{"state" => "TASK_STATE_AUTH_REQUIRED"}, :status)
       assert status.state == :auth_required
     end
 
-    test "decodes simple state" do
+    test "decodes v0.3 TASK_STATE_WORKING" do
+      {:ok, status} = JSON.decode(%{"state" => "TASK_STATE_WORKING"}, :status)
+      assert status.state == :working
+    end
+
+    test "still accepts legacy hyphenated state" do
+      {:ok, status} = JSON.decode(%{"state" => "input-required"}, :status)
+      assert status.state == :input_required
+    end
+
+    test "still accepts legacy lowercase state" do
       {:ok, status} = JSON.decode(%{"state" => "working"}, :status)
       assert status.state == :working
     end

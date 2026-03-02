@@ -60,7 +60,7 @@ defmodule A2A.JSONRPCTest do
       {:reply, response} = JSONRPC.handle(rpc("tasks/get", params), @handler)
 
       assert response["result"]["id"] == "existing"
-      assert response["result"]["status"]["state"] == "working"
+      assert response["result"]["status"]["state"] == "TASK_STATE_WORKING"
     end
 
     test "missing task returns task_not_found" do
@@ -85,7 +85,7 @@ defmodule A2A.JSONRPCTest do
       {:reply, response} = JSONRPC.handle(rpc("tasks/cancel", params), @handler)
 
       assert response["result"]["id"] == "cancelable"
-      assert response["result"]["status"]["state"] == "canceled"
+      assert response["result"]["status"]["state"] == "TASK_STATE_CANCELED"
     end
 
     test "non-cancelable task returns task_not_cancelable" do
@@ -177,7 +177,7 @@ defmodule A2A.JSONRPCTest do
       {:reply, response} =
         JSONRPC.handle(rpc("CancelTask", %{"id" => "cancelable"}), @handler)
 
-      assert response["result"]["status"]["state"] == "canceled"
+      assert response["result"]["status"]["state"] == "TASK_STATE_CANCELED"
     end
 
     test "GetExtendedAgentCard returns unsupported_operation" do

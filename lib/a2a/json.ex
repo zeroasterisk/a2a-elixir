@@ -19,23 +19,51 @@ defmodule A2A.JSON do
       %A2A.Part.Text{kind: :text, text: "hello", metadata: %{}}
   """
 
-  # State atoms that differ from their wire string representation
+  # v0.3 wire format: TASK_STATE_* prefixed enum values
   @state_to_string %{
-    input_required: "input-required",
-    auth_required: "auth-required"
+    submitted: "TASK_STATE_SUBMITTED",
+    working: "TASK_STATE_WORKING",
+    input_required: "TASK_STATE_INPUT_REQUIRED",
+    completed: "TASK_STATE_COMPLETED",
+    canceled: "TASK_STATE_CANCELED",
+    failed: "TASK_STATE_FAILED",
+    rejected: "TASK_STATE_REJECTED",
+    auth_required: "TASK_STATE_AUTH_REQUIRED",
+    unknown: "TASK_STATE_UNKNOWN"
   }
 
+  # Accept both old and v0.3 wire formats
   @string_to_state %{
+    "TASK_STATE_SUBMITTED" => :submitted,
+    "TASK_STATE_WORKING" => :working,
+    "TASK_STATE_INPUT_REQUIRED" => :input_required,
+    "TASK_STATE_COMPLETED" => :completed,
+    "TASK_STATE_CANCELED" => :canceled,
+    "TASK_STATE_FAILED" => :failed,
+    "TASK_STATE_REJECTED" => :rejected,
+    "TASK_STATE_AUTH_REQUIRED" => :auth_required,
+    "TASK_STATE_UNKNOWN" => :unknown,
+    # Legacy lowercase format
+    "submitted" => :submitted,
+    "working" => :working,
     "input-required" => :input_required,
-    "auth-required" => :auth_required
+    "completed" => :completed,
+    "canceled" => :canceled,
+    "failed" => :failed,
+    "rejected" => :rejected,
+    "auth-required" => :auth_required,
+    "unknown" => :unknown
   }
 
-  @valid_states ~w(
-    submitted working input-required completed
-    canceled failed rejected auth-required unknown
-  )
-
-  @valid_roles ~w(user agent)
+  # v0.3 wire format: ROLE_* prefixed enum values
+  @role_to_string %{user: "ROLE_USER", agent: "ROLE_AGENT"}
+  @string_to_role %{
+    "ROLE_USER" => :user,
+    "ROLE_AGENT" => :agent,
+    # Legacy lowercase format
+    "user" => :user,
+    "agent" => :agent
+  }
 
   # -------------------------------------------------------------------
   # Encoding
@@ -76,7 +104,7 @@ defmodule A2A.JSON do
     map =
       %{
         "kind" => "message",
-        "role" => Atom.to_string(msg.role),
+        "role" => Map.fetch!(@role_to_string, msg.role),
         "parts" => encode_list(msg.parts)
       }
       |> put_unless_nil("messageId", msg.message_id)
@@ -464,7 +492,7 @@ defmodule A2A.JSON do
   # -------------------------------------------------------------------
 
   defp encode_state(state) do
-    Map.get(@state_to_string, state, Atom.to_string(state))
+    Map.fetch!(@state_to_string, state)
   end
 
   defp encode_timestamp(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
@@ -555,14 +583,10 @@ defmodule A2A.JSON do
     {:ok, @string_to_state[str]}
   end
 
-  defp decode_state(str) when str in @valid_states do
-    {:ok, String.to_existing_atom(str)}
-  end
-
   defp decode_state(str), do: {:error, {:invalid_state, str}}
 
-  defp decode_role(str) when str in @valid_roles do
-    {:ok, String.to_existing_atom(str)}
+  defp decode_role(str) when is_map_key(@string_to_role, str) do
+    {:ok, @string_to_role[str]}
   end
 
   defp decode_role(str), do: {:error, {:invalid_role, str}}
@@ -598,6 +622,16 @@ defmodule A2A.JSON do
     |> case do
       {:ok, list} -> {:ok, Enum.reverse(list)}
       error -> error
+    end
+  end
+
+  # v0.3: parts may omit "kind" — infer from content field presence
+  defp infer_part_type(map) do
+    cond do
+      Map.has_key?(map, "text") -> decode_text_part(map)
+      Map.has_key?(map, "file") -> decode_file_part(map)
+      Map.has_key?(map, "data") -> decode_data_part(map)
+      true -> {:error, {:missing_field, "kind"}}
     end
   end
 

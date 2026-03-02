@@ -102,7 +102,7 @@ defmodule A2A.ClientTest do
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
         assert decoded["method"] == "message/send"
-        assert decoded["params"]["message"]["role"] == "user"
+        assert decoded["params"]["message"]["role"] == "ROLE_USER"
 
         json_resp(conn, 200, jsonrpc_success(@task_json))
       end
@@ -149,7 +149,7 @@ defmodule A2A.ClientTest do
       plug = fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
-        assert decoded["params"]["message"]["role"] == "user"
+        assert decoded["params"]["message"]["role"] == "ROLE_USER"
         assert decoded["params"]["message"]["messageId"] == "msg-custom"
 
         json_resp(conn, 200, jsonrpc_success(@task_json))

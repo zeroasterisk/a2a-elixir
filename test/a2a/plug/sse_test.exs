@@ -87,7 +87,7 @@ defmodule A2A.Plug.SSETest do
 
       assert last["result"]["kind"] == "status-update"
       assert last["result"]["final"] == true
-      assert last["result"]["status"]["state"] == "completed"
+      assert last["result"]["status"]["state"] == "TASK_STATE_COMPLETED"
     end
 
     test "all events are valid JSON-RPC envelopes", %{agent: agent} do
@@ -157,7 +157,7 @@ defmodule A2A.Plug.SSETest do
       last = List.last(events)
       assert last["result"]["kind"] == "status-update"
       assert last["result"]["final"] == true
-      assert last["result"]["status"]["state"] == "failed"
+      assert last["result"]["status"]["state"] == "TASK_STATE_FAILED"
     end
   end
 end
