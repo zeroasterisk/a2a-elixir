@@ -50,13 +50,15 @@ defmodule A2A.JSON do
 
   # v0.3 wire format: ROLE_* prefixed enum values
   @role_to_string %{user: "ROLE_USER", agent: "ROLE_AGENT"}
-  @string_to_role %{
-    "ROLE_USER" => :user,
-    "ROLE_AGENT" => :agent,
-    # Legacy lowercase format
-    "user" => :user,
-    "agent" => :agent
-  }
+
+  @string_to_role @role_to_string
+                  |> Map.new(fn {k, v} -> {v, k} end)
+                  |> Map.merge(%{
+                    # Legacy lowercase format
+                    "user" => :user,
+                    "agent" => :agent
+                  })
+
   @doc """
   Returns the list of valid v0.3 wire-format state strings.
   """
