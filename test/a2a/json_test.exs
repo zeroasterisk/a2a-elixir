@@ -311,8 +311,23 @@ defmodule A2A.JSONTest do
       assert %Part.Data{kind: :data, data: %{"x" => 1}} = part
     end
 
-    test "returns error for missing kind" do
-      assert {:error, {:missing_field, "kind"}} = JSON.decode(%{"text" => "hi"}, :part)
+    test "infers text part when kind is absent" do
+      {:ok, part} = JSON.decode(%{"text" => "hi"}, :part)
+      assert %Part.Text{text: "hi"} = part
+    end
+
+    test "infers file part when kind is absent" do
+      {:ok, part} = JSON.decode(%{"file" => %{"uri" => "https://example.com/f"}}, :part)
+      assert %Part.File{} = part
+    end
+
+    test "infers data part when kind is absent" do
+      {:ok, part} = JSON.decode(%{"data" => %{"x" => 1}}, :part)
+      assert %Part.Data{data: %{"x" => 1}} = part
+    end
+
+    test "returns error when kind is absent and no content field" do
+      assert {:error, {:missing_field, "kind"}} = JSON.decode(%{"metadata" => %{}}, :part)
     end
 
     test "returns error for unknown kind" do

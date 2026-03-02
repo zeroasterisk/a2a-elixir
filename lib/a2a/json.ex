@@ -340,9 +340,10 @@ defmodule A2A.JSON do
 
   Returns `{:ok, struct}` on success or `{:error, reason}` on failure.
 
-  The `:part` type dispatches on the `"kind"` field. The `:event` type
-  dispatches on `"kind"` to one of `"status-update"`, `"artifact-update"`,
-  `"task"`, or `"message"`.
+  The `:part` type dispatches on the `"kind"` field, or infers the type
+  from content fields (`"text"`, `"file"`, `"data"`) when `"kind"` is
+  absent (v0.3 format). The `:event` type dispatches on `"kind"` to one
+  of `"status-update"`, `"artifact-update"`, `"task"`, or `"message"`.
   """
   @spec decode(map(), decode_type()) :: {:ok, struct()} | {:error, term()}
   def decode(map, :task) do
@@ -414,7 +415,7 @@ defmodule A2A.JSON do
       "text" -> decode_text_part(map)
       "file" -> decode_file_part(map)
       "data" -> decode_data_part(map)
-      nil -> {:error, {:missing_field, "kind"}}
+      nil -> infer_part_type(map)
       other -> {:error, {:unknown_kind, other}}
     end
   end
