@@ -82,8 +82,7 @@ defmodule A2A.JSON do
     {:ok, status} = encode(task.status)
 
     map =
-      %{"kind" => "task", "id" => task.id, "status" => status}
-      |> put_unless_nil("contextId", task.context_id)
+      %{"kind" => "task", "id" => task.id, "contextId" => task.context_id, "status" => status}
       |> put_unless_empty("history", encode_list(task.history))
       |> put_unless_empty("artifacts", encode_list(task.artifacts))
       |> put_unless_empty("metadata", task.metadata)
