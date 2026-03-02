@@ -22,7 +22,8 @@ defmodule A2A.Test.TCKAgent do
         {:input_required, [A2A.Part.Text.new("Please provide additional input")]}
 
       true ->
-        {:reply, [A2A.Part.Text.new("TCK response: #{text}")]}
+        parts = [A2A.Part.Text.new("TCK response: #{text}")]
+        {:stream, Stream.concat([parts])}
     end
   end
 

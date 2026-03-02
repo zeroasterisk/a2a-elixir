@@ -29,7 +29,8 @@ defmodule TCK.Agent do
         {:input_required, [A2A.Part.Text.new("Please provide additional input")]}
 
       true ->
-        {:reply, [A2A.Part.Text.new("TCK response: #{text}")]}
+        parts = [A2A.Part.Text.new("TCK response: #{text}")]
+        {:stream, Stream.concat([parts])}
     end
   end
 
@@ -51,9 +52,7 @@ base_url = "http://localhost:#{port}"
   Bandit.start_link(
     plug:
       {A2A.Plug,
-       agent: TCK.Agent,
-       base_url: base_url,
-       agent_card_opts: [protocol_version: "0.2.0"]},
+       agent: TCK.Agent, base_url: base_url, agent_card_opts: [protocol_version: "0.2.0"]},
     port: port,
     startup_log: false
   )
