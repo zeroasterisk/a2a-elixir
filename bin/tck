@@ -93,9 +93,9 @@ fi
 
 cd "$TCK_DIR"
 if [ "$USE_UV" = true ]; then
-  uv run ./run_tck.py $TCK_ARGS 2>&1 || true
+  uv run ./run_tck.py $TCK_ARGS 2>&1
 else
-  .venv/bin/python ./run_tck.py $TCK_ARGS 2>&1 || true
+  .venv/bin/python ./run_tck.py $TCK_ARGS 2>&1
 fi
 cd ..
 
