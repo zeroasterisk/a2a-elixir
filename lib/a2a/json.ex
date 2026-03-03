@@ -547,7 +547,15 @@ defmodule A2A.JSON do
     ])
   end
 
-  defp encode_known_keys(source, mappings) do
+  @doc """
+  Converts an Elixir map with atom keys to a camelCase JSON map.
+
+  Each mapping is a `{json_key, atom_key}` pair. Keys whose values are `nil`
+  (or absent) are omitted from the result. Looks up both the atom key and the
+  JSON-string key so the function works with either representation.
+  """
+  @spec encode_known_keys(map(), [{String.t(), atom()}]) :: map()
+  def encode_known_keys(source, mappings) do
     Enum.reduce(mappings, %{}, fn {json_key, atom_key}, acc ->
       case Map.get(source, atom_key, Map.get(source, json_key)) do
         nil -> acc

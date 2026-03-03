@@ -305,20 +305,11 @@ if Code.ensure_loaded?(Req) do
     defp encode_configuration(nil), do: nil
 
     defp encode_configuration(config) when is_map(config) do
-      Enum.reduce(
-        [
-          {"acceptedOutputModes", :accepted_output_modes},
-          {"blocking", :blocking},
-          {"historyLength", :history_length}
-        ],
-        %{},
-        fn {json_key, atom_key}, acc ->
-          case Map.get(config, atom_key, Map.get(config, json_key)) do
-            nil -> acc
-            val -> Map.put(acc, json_key, val)
-          end
-        end
-      )
+      A2A.JSON.encode_known_keys(config, [
+        {"acceptedOutputModes", :accepted_output_modes},
+        {"blocking", :blocking},
+        {"historyLength", :history_length}
+      ])
     end
 
     defp put_opt(map, _key, nil), do: map
