@@ -270,7 +270,7 @@ defmodule A2A.JSONTest do
   describe "decode :part" do
     test "decodes text part" do
       {:ok, part} = JSON.decode(%{"kind" => "text", "text" => "hello"}, :part)
-      assert %Part.Text{kind: :text, text: "hello", metadata: %{}} = part
+      assert %Part.Text{text: "hello", metadata: %{}} = part
     end
 
     test "decodes file part with base64 bytes" do
@@ -289,7 +289,7 @@ defmodule A2A.JSONTest do
           :part
         )
 
-      assert %Part.File{kind: :file} = part
+      assert %Part.File{} = part
       assert part.file.bytes == "raw bytes"
       assert part.file.name == "f.bin"
       assert part.file.mime_type == "application/octet-stream"
@@ -308,7 +308,7 @@ defmodule A2A.JSONTest do
 
     test "decodes data part" do
       {:ok, part} = JSON.decode(%{"kind" => "data", "data" => %{"x" => 1}}, :part)
-      assert %Part.Data{kind: :data, data: %{"x" => 1}} = part
+      assert %Part.Data{data: %{"x" => 1}} = part
     end
 
     test "infers text part when kind is absent" do

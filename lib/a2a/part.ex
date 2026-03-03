@@ -18,12 +18,11 @@ defmodule A2A.Part.Text do
   """
 
   @type t :: %__MODULE__{
-          kind: :text,
           text: String.t(),
           metadata: map()
         }
 
-  defstruct kind: :text, text: "", metadata: %{}
+  defstruct text: "", metadata: %{}
 
   @doc """
   Creates a new text part.
@@ -40,13 +39,12 @@ defmodule A2A.Part.File do
   """
 
   @type t :: %__MODULE__{
-          kind: :file,
           file: A2A.FileContent.t(),
           metadata: map()
         }
 
   @enforce_keys [:file]
-  defstruct kind: :file, file: nil, metadata: %{}
+  defstruct file: nil, metadata: %{}
 
   @doc """
   Creates a new file part.
@@ -63,12 +61,11 @@ defmodule A2A.Part.Data do
   """
 
   @type t :: %__MODULE__{
-          kind: :data,
           data: map(),
           metadata: map()
         }
 
-  defstruct kind: :data, data: %{}, metadata: %{}
+  defstruct data: %{}, metadata: %{}
 
   @doc """
   Creates a new data part.

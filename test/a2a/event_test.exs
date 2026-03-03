@@ -12,7 +12,6 @@ defmodule A2A.EventTest do
       event = StatusUpdate.new("tsk-1", status)
 
       assert %StatusUpdate{
-               kind: :status_update,
                task_id: "tsk-1",
                context_id: nil,
                status: ^status,
@@ -35,12 +34,6 @@ defmodule A2A.EventTest do
       assert event.final == true
       assert event.metadata == %{source: "test"}
     end
-
-    test "default struct has kind :status_update" do
-      status = Status.new(:submitted)
-      event = StatusUpdate.new("tsk-1", status)
-      assert event.kind == :status_update
-    end
   end
 
   describe "ArtifactUpdate" do
@@ -49,7 +42,6 @@ defmodule A2A.EventTest do
       event = ArtifactUpdate.new("tsk-1", artifact)
 
       assert %ArtifactUpdate{
-               kind: :artifact_update,
                task_id: "tsk-1",
                context_id: nil,
                artifact: ^artifact,
@@ -74,12 +66,6 @@ defmodule A2A.EventTest do
       assert event.append == true
       assert event.last_chunk == false
       assert event.metadata == %{seq: 1}
-    end
-
-    test "default struct has kind :artifact_update" do
-      artifact = Artifact.new([Part.Text.new("x")])
-      event = ArtifactUpdate.new("tsk-1", artifact)
-      assert event.kind == :artifact_update
     end
   end
 end

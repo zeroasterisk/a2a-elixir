@@ -16,7 +16,7 @@ defmodule A2A.JSON do
 
       iex> {:ok, part} = A2A.JSON.decode(%{"kind" => "text", "text" => "hello"}, :part)
       iex> part
-      %A2A.Part.Text{kind: :text, text: "hello", metadata: %{}}
+      %A2A.Part.Text{text: "hello", metadata: %{}}
   """
 
   # v0.3 wire format: TASK_STATE_* prefixed enum values

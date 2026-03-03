@@ -17,7 +17,6 @@ defmodule A2A.Event.StatusUpdate do
   """
 
   @type t :: %__MODULE__{
-          kind: :status_update,
           task_id: String.t(),
           context_id: String.t() | nil,
           status: A2A.Task.Status.t(),
@@ -30,7 +29,6 @@ defmodule A2A.Event.StatusUpdate do
     :task_id,
     :context_id,
     :status,
-    kind: :status_update,
     final: false,
     metadata: %{}
   ]
@@ -56,7 +54,6 @@ defmodule A2A.Event.ArtifactUpdate do
   """
 
   @type t :: %__MODULE__{
-          kind: :artifact_update,
           task_id: String.t(),
           context_id: String.t() | nil,
           artifact: A2A.Artifact.t(),
@@ -72,7 +69,6 @@ defmodule A2A.Event.ArtifactUpdate do
     :artifact,
     :append,
     :last_chunk,
-    kind: :artifact_update,
     metadata: %{}
   ]
 
