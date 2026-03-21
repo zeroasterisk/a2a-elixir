@@ -259,7 +259,7 @@ defmodule A2A.JSON do
     map =
       %{"uri" => ext.uri}
       |> put_unless_nil("description", ext.description)
-      |> put_unless_empty("params", ext.params)
+      |> put_unless_nil("params", ext.params)
 
     map = if ext.required, do: Map.put(map, "required", true), else: map
 
