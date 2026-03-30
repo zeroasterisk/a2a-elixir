@@ -84,4 +84,25 @@ defmodule A2A.AgentCard do
     signatures: [],
     security_requirements: []
   ]
+
+  @doc """
+  Converts an AgentCard struct to a JSON-friendly string-keyed map.
+  """
+  @spec to_map(t()) :: map()
+  def to_map(%__MODULE__{} = card) do
+    card
+    |> Map.from_struct()
+    |> Enum.map(fn {k, v} -> {to_json_key(k), v} end)
+    |> Map.new()
+  end
+
+  defp to_json_key(:default_input_modes), do: "defaultInputModes"
+  defp to_json_key(:default_output_modes), do: "defaultOutputModes"
+  defp to_json_key(:documentation_url), do: "documentationUrl"
+  defp to_json_key(:icon_url), do: "iconUrl"
+  defp to_json_key(:protocol_version), do: "protocolVersion"
+  defp to_json_key(:supported_interfaces), do: "supportedInterfaces"
+  defp to_json_key(:security_schemes), do: "securitySchemes"
+  defp to_json_key(:security_requirements), do: "securityRequirements"
+  defp to_json_key(key), do: to_string(key)
 end
